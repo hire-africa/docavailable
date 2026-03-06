@@ -127,7 +127,7 @@ class DoctorWalletController extends Controller
 
         // 🛠 Backwards Compatibility: Alias 'method' to 'payment_method'
         if ($request->has('method') && !$request->has('payment_method')) {
-            $request->merge(['payment_method' => $request->method]);
+            $request->merge(['payment_method' => $request->input('method')]);
         }
 
         // 🛠 Backwards Compatibility: Reconstruct payment_details if missing (old APKs)
@@ -247,31 +247,53 @@ class DoctorWalletController extends Controller
         try {
             DB::beginTransaction();
 
+            // 🔒 Lock the wallet for update to prevent parallel request race conditions
+            $wallet = DoctorWallet::where('doctor_id', $user->id)->lockForUpdate()->first();
+
+            if ($wallet->balance < $request->amount) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Insufficient balance for withdrawal (locked check)'
+                ], 400);
+            }
+
+            // 💸 Immediate Debit: Lock the funds now
+            $transaction = $wallet->debit(
+                $request->amount,
+                "Withdrawal Request (Pending Admin Approval)",
+                [
+                    'payment_method' => $request->payment_method,
+                    'is_pending' => true
+                ]
+            );
+
             // Create withdrawal request
             $withdrawalData = [
                 'doctor_id' => $user->id,
                 'amount' => $request->amount,
                 'status' => WithdrawalRequest::STATUS_PENDING,
                 'payment_method' => $request->payment_method,
+                'bank_name' => $request->input('payment_details.bank_name'),
+                'account_number' => $request->input('payment_details.account_number'),
+                'bank_branch' => $request->input('payment_details.bank_branch'),
+                'account_holder_name' => $user->first_name . ' ' . $user->last_name,
+                'mobile_provider' => $request->input('payment_details.mobile_provider'),
+                'mobile_number' => $request->input('payment_details.mobile_number'),
             ];
 
-            // Add payment details based on method
-            if ($request->payment_method === 'bank_transfer') {
-                $withdrawalData['bank_name'] = $request->payment_details['bank_name'];
-                $withdrawalData['account_number'] = $request->payment_details['account_number'];
-                $withdrawalData['bank_branch'] = $request->payment_details['bank_branch'] ?? null;
-                $withdrawalData['account_holder_name'] = $user->first_name . ' ' . $user->last_name;
-            } else {
-                $withdrawalData['mobile_provider'] = $request->payment_details['mobile_provider'];
-                $withdrawalData['mobile_number'] = $request->payment_details['mobile_number'];
-            }
+            $withdrawalRequest = WithdrawalRequest::create($withdrawalData);
 
-            Log::info('✅ [DoctorWalletController] Withdrawal request verified and saving', [
-                'user_id' => $user->id,
-                'data' => $withdrawalData
+            // 🔗 Link transaction to request
+            $transaction->update([
+                'metadata' => array_merge($transaction->metadata ?? [], [
+                    'withdrawal_request_id' => $withdrawalRequest->id
+                ])
             ]);
 
-            $withdrawalRequest = WithdrawalRequest::create($withdrawalData);
+            Log::info('✅ [DoctorWalletController] Withdrawal request verified and saved', [
+                'user_id' => $user->id,
+                'withdrawal_request_id' => $withdrawalRequest->id
+            ]);
 
             DB::commit();
 

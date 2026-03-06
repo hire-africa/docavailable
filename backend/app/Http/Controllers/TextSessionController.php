@@ -14,6 +14,7 @@ use App\Services\NotificationService;
 use App\Services\TimezoneService;
 use App\Services\VoiceMessageArchiveService;
 use App\Services\AnonymizationService;
+use App\Services\DoctorPaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
@@ -46,8 +47,9 @@ class TextSessionController extends Controller
      * Start a call from inside an existing text session.
      * This creates a NEW call_session and leaves the text_session untouched.
      */
-    public function startCall(Request $request, int $textSessionId): JsonResponse
+    public function startCall(Request $request, $textSessionId): JsonResponse
     {
+        $textSessionId = $this->resolveSessionId($textSessionId);
         try {
             $user = auth()->user();
             if (!$user) {
@@ -358,6 +360,7 @@ class TextSessionController extends Controller
      */
     public function checkResponse($sessionId): JsonResponse
     {
+        $sessionId = $this->resolveSessionId($sessionId);
         try {
             $session = TextSession::find($sessionId);
 
@@ -819,7 +822,7 @@ class TextSessionController extends Controller
             $userType = $user->user_type;
 
             $query = TextSession::with(['patient', 'doctor'])
-                ->where('status', 'ended');
+                ->whereIn('status', [TextSession::STATUS_ENDED, TextSession::STATUS_EXPIRED]);
 
             if ($userType === 'doctor') {
                 $query->where('doctor_id', $userId);
@@ -854,6 +857,7 @@ class TextSessionController extends Controller
      */
     public function endSession(Request $request, $sessionId): JsonResponse
     {
+        $sessionId = $this->resolveSessionId($sessionId);
         try {
             $userId = auth()->id();
             $userType = auth()->user()->user_type;
@@ -989,13 +993,9 @@ class TextSessionController extends Controller
      */
     public function getSession(Request $request, $manualSessionId): JsonResponse
     {
-        // 🛠 Fix: Handle text_session_ prefix if passed from frontend
-        $actualId = $manualSessionId;
-        if (is_string($manualSessionId)) {
-            $actualId = str_replace(['text_session_', 'text_session:'], '', $manualSessionId);
-        }
+        $actualId = $this->resolveSessionId($manualSessionId);
 
-        // Enforce numeric ID to prevent SQL errors if string routes are matched incorrectly
+        // Enforce numeric ID
         if (!is_numeric($actualId)) {
             Log::warning('⚠️ [TextSessionController] Invalid session ID format received', [
                 'received_id' => $manualSessionId,
@@ -1169,6 +1169,7 @@ class TextSessionController extends Controller
      */
     public function updateStatus(Request $request, $sessionId): JsonResponse
     {
+        $sessionId = $this->resolveSessionId($sessionId);
         try {
             $validator = Validator::make($request->all(), [
                 'status' => 'required|string|in:waiting_for_doctor,active,ended'
@@ -1277,8 +1278,9 @@ class TextSessionController extends Controller
      */
     public function processAutoDeduction(Request $request, $sessionId): JsonResponse
     {
+        $sessionId = $this->resolveSessionId($sessionId);
         try {
-            $session = TextSession::find($sessionId);
+            $session = TextSession::find((int) $sessionId);
 
             if (!$session) {
                 return response()->json([
@@ -1830,5 +1832,16 @@ class TextSessionController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Resolve session ID by removing prefixes like 'text_session_'.
+     */
+    private function resolveSessionId($sessionId)
+    {
+        if (is_string($sessionId)) {
+            return str_replace(['text_session_', 'text_session:'], '', $sessionId);
+        }
+        return $sessionId;
     }
 }

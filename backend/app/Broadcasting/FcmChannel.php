@@ -134,16 +134,31 @@ class FcmChannel
         // Only add notification block for NON-CALL messages
         // Incoming calls use CallKeep native UI, not notifications
         if (!$isIncomingCall && isset($message['notification'])) {
+            // 🛠 FIX: Allow channel_id override from notification data
+            // If data contains 'channel_id', use it. Otherwise fall back to defaults.
+            $finalChannelId = $data['channel_id'] ?? $channelId;
+
+            // Optional: If user specifically wants to move AWAY from "urgent_medical" 
+            // but didn't specify a new one, we can use "default" or "messages"
+            if ($finalChannelId === 'urgent_medical') {
+                $finalChannelId = $data['android_channel_id'] ?? 'urgent_medical'; // Fallback to another legacy field if needed
+            }
+
             $payload['message']['notification'] = [
                 'title' => $message['notification']['title'] ?? '',
                 'body' => $message['notification']['body'] ?? '',
             ];
             $payload['message']['android']['notification'] = [
                 'sound' => 'default',
-                'channel_id' => $channelId,
                 'notification_priority' => 'PRIORITY_MAX',
                 'visibility' => 'PUBLIC'
             ];
+
+            // Only add channel_id if it's NOT the legacy "urgent_medical" (which user wants to avoid)
+            // or if it's specifically overridden in data.
+            if ($finalChannelId && $finalChannelId !== 'urgent_medical') {
+                $payload['message']['android']['notification']['channel_id'] = $finalChannelId;
+            }
         }
 
         // Add/Merge iOS config from notification if present

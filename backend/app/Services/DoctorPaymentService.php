@@ -649,14 +649,32 @@ class DoctorPaymentService
                         if ($doctor) {
                             $wallet = DoctorWallet::getOrCreate($doctor->id);
                             $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $freshNewDeductions;
-                            $wallet->credit($paymentAmount, "Auto-deduction for session {$freshSession->id} ({$freshNewDeductions} sessions)");
+
+                            // Get payment transaction ID from patient's subscription for verification
+                            $paymentTransactionId = $subscription->payment_transaction_id;
+                            $paymentGateway = $subscription->payment_gateway;
+
+                            $wallet->credit(
+                                $paymentAmount,
+                                "Auto-deduction for session {$freshSession->id} ({$freshNewDeductions} sessions)",
+                                'text',
+                                $freshSession->id,
+                                'text_sessions',
+                                [
+                                    'patient_name' => $patient->first_name . " " . $patient->last_name,
+                                    'sessions_deducted' => $freshNewDeductions,
+                                    'payment_transaction_id' => $paymentTransactionId,
+                                    'payment_gateway' => $paymentGateway,
+                                    'elapsed_minutes' => $elapsedMinutes,
+                                ]
+                            );
 
                             // Send notification to doctor about payment
                             $notificationService = new NotificationService();
                             $notificationService->sendWalletNotification(
                                 $wallet->transactions()->latest()->first(),
                                 'payment_received',
-                                "You received {$paymentAmount} for {$freshNewDeductions} session(s) from auto-deduction"
+                                "You received MWK {$paymentAmount} for {$freshNewDeductions} session(s) from auto-deduction"
                             );
                         }
 
