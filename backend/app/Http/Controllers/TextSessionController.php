@@ -806,6 +806,10 @@ class TextSessionController extends Controller
      */
     public function history(Request $request): JsonResponse
     {
+        Log::warning("[TextSessionController] history requested", [
+            'user_id' => auth()->id(),
+            'params' => $request->all()
+        ]);
         try {
             // Clear any cached query plans to handle schema changes
             DB::statement('DISCARD PLANS');
@@ -993,6 +997,10 @@ class TextSessionController extends Controller
      */
     public function getSession(Request $request, $manualSessionId): JsonResponse
     {
+        Log::warning("[TextSessionController] getSession requested", [
+            'manualSessionId' => $manualSessionId,
+            'user_id' => auth()->id()
+        ]);
         $actualId = $this->resolveSessionId($manualSessionId);
 
         // Enforce numeric ID

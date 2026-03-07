@@ -712,15 +712,42 @@ class TextAppointmentController extends Controller
      */
     public function getSessionStatus(Request $request, $appointmentId): JsonResponse
     {
+        Log::info("[TextAppointmentController] getSessionStatus requested", [
+            'appointmentId' => $appointmentId,
+            'user_id' => auth()->id()
+        ]);
+
         try {
             $userId = auth()->id();
 
+            // Handle prefixed IDs for backwards compatibility
+            $actualId = $appointmentId;
+            if (is_string($appointmentId)) {
+                $actualId = str_replace(['text_session_', 'text_session:'], '', $appointmentId);
+            }
+
             // Get the appointment
-            $appointment = Appointment::find($appointmentId);
+            $appointment = Appointment::find($actualId);
             if (!$appointment) {
+                // If not found as appointment, try to find the text session directly
+                $textSession = TextSession::find($actualId);
+                if ($textSession) {
+                    return response()->json([
+                        'success' => true,
+                        'data' => [
+                            'session_id' => $textSession->id,
+                            'is_active' => $textSession->status === 'active',
+                            'is_ended' => in_array($textSession->status, ['ended', 'expired']),
+                            'start_time' => $textSession->activated_at,
+                            'last_activity_time' => $textSession->updated_at,
+                            'status' => $textSession->status
+                        ]
+                    ]);
+                }
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'Appointment not found'
+                    'message' => 'Appointment or session not found'
                 ], 404);
             }
 

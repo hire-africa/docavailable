@@ -275,7 +275,27 @@ export const endedSessionStorageService = {
           reason: session.reason,
         };
 
-        // Store metadata and update index
+        // Store full session data so it can be loaded when tapped
+        const fullSession: EndedSession = {
+          appointment_id: appointmentId,
+          doctor_id: session.doctor_id,
+          doctor_name: session.doctor_name || (session.doctor ? `${session.doctor.first_name} ${session.doctor.last_name}` : undefined),
+          doctor_profile_picture_url: session.doctor?.profile_picture_url,
+          doctor_profile_picture: session.doctor?.profile_picture,
+          patient_id: session.patient_id,
+          patient_name: session.patient_name || (session.patient ? `${session.patient.first_name} ${session.patient.last_name}` : undefined),
+          patient_profile_picture_url: session.patient?.profile_picture_url,
+          patient_profile_picture: session.patient?.profile_picture,
+          appointment_date: session.appointment_date || (session.started_at ? session.started_at.split('T')[0] : undefined),
+          ended_at: session.ended_at || session.updated_at,
+          session_duration: session.session_duration,
+          reason: session.reason,
+          messages: Array.isArray(session.messages) ? session.messages : [],
+          message_count: Array.isArray(session.messages) ? session.messages.length : 0,
+        };
+
+        // Store both metadata and full session data, and update index
+        await AsyncStorage.setItem(SESSION_KEY(appointmentId), JSON.stringify(fullSession));
         await AsyncStorage.setItem(META_KEY(appointmentId), JSON.stringify(meta));
         await addToUserIndex(userId, userType, appointmentId);
       }
