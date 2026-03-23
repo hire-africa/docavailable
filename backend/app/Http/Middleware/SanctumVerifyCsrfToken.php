@@ -19,7 +19,7 @@ class SanctumVerifyCsrfToken extends Middleware
      * @var array<int, string>
      */
     protected $except = [
-         'api/*'
+         'api/*',
         'api/payments/webhook',
         'api/paychangu/callback',
     ];
