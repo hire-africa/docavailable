@@ -2,19 +2,27 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\TextSession;
 use App\Models\User;
+use App\Models\DoctorAvailability;
+use App\Models\Appointment;
+use App\Models\TextSession;
+use App\Models\Chat;
+use App\Models\Message;
 use App\Models\Subscription;
 use App\Services\MessageStorageService;
 use App\Services\NotificationService;
 use App\Services\TimezoneService;
 use App\Services\VoiceMessageArchiveService;
 use App\Services\AnonymizationService;
+use App\Services\DoctorPaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Log; // Added Log facade
+use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class TextSessionController extends Controller
 {
@@ -39,8 +47,9 @@ class TextSessionController extends Controller
      * Start a call from inside an existing text session.
      * This creates a NEW call_session and leaves the text_session untouched.
      */
-    public function startCall(Request $request, int $textSessionId): JsonResponse
+    public function startCall(Request $request, $textSessionId): JsonResponse
     {
+        $textSessionId = $this->resolveSessionId($textSessionId);
         try {
             $user = auth()->user();
             if (!$user) {
@@ -208,21 +217,38 @@ class TextSessionController extends Controller
 
             // Use transaction to ensure atomicity and prevent race conditions
             $textSession = DB::transaction(function () use ($patientId, $doctorId, $reason, $sessionsRemaining) {
-                // Lock and check for existing session again within transaction
-                $existingSession = TextSession::where('patient_id', $patientId)
-                    ->where('doctor_id', $doctorId)
+                // Lock and check for existing session for PATIENT within transaction
+                $existingPatientSession = TextSession::where('patient_id', $patientId)
                     ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])
                     ->lockForUpdate()
                     ->first();
 
-                if ($existingSession) {
+                if ($existingPatientSession) {
                     // Apply lazy expiration at read-time
-                    $existingSession->applyLazyExpiration();
+                    $existingPatientSession->applyLazyExpiration();
 
                     // Re-check status after lazy expiration
-                    if (in_array($existingSession->status, [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])) {
-                        throw new \Exception('You already have an active session with this doctor');
+                    if (in_array($existingPatientSession->status, [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])) {
+                        throw new \Exception('You already have an active session');
                     }
+                }
+
+                // Check if DOCTOR is currently in another session (with anyone)
+                $doctorBusyInText = TextSession::where('doctor_id', $doctorId)
+                    ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])
+                    ->exists();
+
+                $doctorBusyInCall = \App\Models\CallSession::where('doctor_id', $doctorId)
+                    ->whereIn('status', [
+                        \App\Models\CallSession::STATUS_ACTIVE,
+                        \App\Models\CallSession::STATUS_CONNECTING,
+                        \App\Models\CallSession::STATUS_WAITING_FOR_DOCTOR,
+                        \App\Models\CallSession::STATUS_ANSWERED,
+                    ])
+                    ->exists();
+
+                if ($doctorBusyInText || $doctorBusyInCall) {
+                    throw new \Exception('Doctor is currently in another session');
                 }
 
                 // Create text session
@@ -334,6 +360,7 @@ class TextSessionController extends Controller
      */
     public function checkResponse($sessionId): JsonResponse
     {
+        $sessionId = $this->resolveSessionId($sessionId);
         try {
             $session = TextSession::find($sessionId);
 
@@ -774,10 +801,67 @@ class TextSessionController extends Controller
     }
 
     /**
+     * Get paginated history of ended/expired text sessions for the authenticated user.
+     * Used by both mobile and web so history stays in sync across devices.
+     */
+    public function history(Request $request): JsonResponse
+    {
+        Log::warning("[TextSessionController] history requested", [
+            'user_id' => auth()->id(),
+            'params' => $request->all()
+        ]);
+        try {
+            // Clear any cached query plans to handle schema changes
+            DB::statement('DISCARD PLANS');
+
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+
+            $userId = $user->id;
+            $userType = $user->user_type;
+
+            $query = TextSession::with(['patient', 'doctor'])
+                ->whereIn('status', [TextSession::STATUS_ENDED, TextSession::STATUS_EXPIRED]);
+
+            if ($userType === 'doctor') {
+                $query->where('doctor_id', $userId);
+            } else {
+                $query->where('patient_id', $userId);
+            }
+
+            $perPage = (int) $request->input('per_page', 20);
+            if ($perPage <= 0 || $perPage > 100) {
+                $perPage = 20;
+            }
+
+            $sessions = $query
+                ->orderByDesc('ended_at')
+                ->orderByDesc('created_at')
+                ->paginate($perPage);
+
+            return response()->json([
+                'success' => true,
+                'data' => $sessions
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch text session history: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * End a text session.
      */
     public function endSession(Request $request, $sessionId): JsonResponse
     {
+        $sessionId = $this->resolveSessionId($sessionId);
         try {
             $userId = auth()->id();
             $userType = auth()->user()->user_type;
@@ -913,19 +997,31 @@ class TextSessionController extends Controller
      */
     public function getSession(Request $request, $manualSessionId): JsonResponse
     {
-        // Enforce numeric ID to prevent SQL errors if string routes are matched incorrectly
-        if (!is_numeric($manualSessionId)) {
+        Log::warning("[TextSessionController] getSession requested", [
+            'manualSessionId' => $manualSessionId,
+            'user_id' => auth()->id()
+        ]);
+        $actualId = $this->resolveSessionId($manualSessionId);
+
+        // Enforce numeric ID
+        if (!is_numeric($actualId)) {
+            Log::warning('⚠️ [TextSessionController] Invalid session ID format received', [
+                'received_id' => $manualSessionId,
+                'parsed_id' => $actualId
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid session ID format'
             ], 404);
         }
 
+        $actualId = (int) $actualId;
+
         try {
             $user = auth()->user();
 
             $session = TextSession::with(['patient.subscription', 'doctor'])
-                ->where('id', $manualSessionId)
+                ->where('id', $actualId)
                 ->first();
 
             if (!$session) {
@@ -938,8 +1034,14 @@ class TextSessionController extends Controller
             // Apply lazy expiration at read-time
             $session->applyLazyExpiration();
 
-            // Check if user is part of this session
-            if ($session->patient_id !== $user->id && $session->doctor_id !== $user->id) {
+            // Check if user is part of this session (Strict Authorization)
+            if ((int) $session->patient_id !== (int) $user->id && (int) $session->doctor_id !== (int) $user->id) {
+                Log::warning('⚠️ [TextSessionController] Unauthorized access attempt', [
+                    'session_id' => $actualId,
+                    'user_id' => $user->id,
+                    'patient_id' => $session->patient_id,
+                    'doctor_id' => $session->doctor_id
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized access to session'
@@ -1075,6 +1177,7 @@ class TextSessionController extends Controller
      */
     public function updateStatus(Request $request, $sessionId): JsonResponse
     {
+        $sessionId = $this->resolveSessionId($sessionId);
         try {
             $validator = Validator::make($request->all(), [
                 'status' => 'required|string|in:waiting_for_doctor,active,ended'
@@ -1183,8 +1286,9 @@ class TextSessionController extends Controller
      */
     public function processAutoDeduction(Request $request, $sessionId): JsonResponse
     {
+        $sessionId = $this->resolveSessionId($sessionId);
         try {
-            $session = TextSession::find($sessionId);
+            $session = TextSession::find((int) $sessionId);
 
             if (!$session) {
                 return response()->json([
@@ -1292,8 +1396,9 @@ class TextSessionController extends Controller
     public function availableDoctors(Request $request): JsonResponse
     {
         try {
-            $doctors = User::where('user_type', 'doctor')
-                // Removed status and online restrictions - show all doctors
+            $doctors = User::with(['doctorAvailability'])
+                ->where('user_type', 'doctor')
+                // Removed status restrictions - show all doctors
                 ->select([
                     'id',
                     'first_name',
@@ -1306,10 +1411,37 @@ class TextSessionController extends Controller
                     'country',
                     'profile_picture_url',
                     'languages_spoken',
-                    'is_online'
                 ])
                 ->get()
                 ->map(function ($doctor) {
+                    $availability = $doctor->doctorAvailability;
+                    $nowUtc = Carbon::now('UTC');
+                    $doctorTz = 'Africa/Blantyre';
+                    $nowLocal = $nowUtc->copy()->setTimezone($doctorTz);
+
+                    $workingHours = null;
+                    if ($availability) {
+                        $workingHours = is_array($availability->working_hours)
+                            ? $availability->working_hours
+                            : json_decode($availability->working_hours, true);
+                    }
+
+                    $dayKey = strtolower($nowLocal->format('l'));
+                    $isWithinHours = is_array($workingHours)
+                        ? $this->isWithinWorkingHoursSlot($workingHours, $nowLocal, $dayKey)
+                        : false;
+
+                    $manuallyOffline = (bool) ($availability?->manually_offline ?? false);
+
+                    $isHeartbeatFresh = false;
+                    if ($availability && $availability->last_active_at) {
+                        $isHeartbeatFresh = Carbon::parse($availability->last_active_at)
+                            ->diffInMinutes($nowUtc) <= 3;
+                    }
+
+                    $isAvailableNow = $isWithinHours && !$manuallyOffline && $isHeartbeatFresh;
+                    $isOnBreak = $isWithinHours && !$manuallyOffline && !$isHeartbeatFresh;
+
                     return [
                         'id' => $doctor->id,
                         'name' => $doctor->display_name ?? "{$doctor->first_name} {$doctor->last_name}",
@@ -1319,7 +1451,9 @@ class TextSessionController extends Controller
                         'location' => implode(', ', array_filter([$doctor->city, $doctor->country])),
                         'profile_picture_url' => $doctor->profile_picture_url,
                         'languages_spoken' => $doctor->languages_spoken,
-                        'is_online' => $doctor->is_online,
+                        'is_online' => $isAvailableNow,
+                        'is_available_now' => $isAvailableNow,
+                        'is_on_break' => $isOnBreak,
                     ];
                 });
 
@@ -1334,6 +1468,68 @@ class TextSessionController extends Controller
                 'message' => 'Failed to fetch available doctors: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    private function isWithinWorkingHoursSlot(array $workingHours, Carbon $now, string $dayKey): bool
+    {
+        $day = $workingHours[$dayKey] ?? null;
+        if (!is_array($day) || empty($day['enabled']) || empty($day['slots']) || !is_array($day['slots'])) {
+            return false;
+        }
+
+        $nowMinutes = ((int) $now->format('H')) * 60 + ((int) $now->format('i'));
+
+        foreach ($day['slots'] as $slot) {
+            if (!is_array($slot))
+                continue;
+            $start = (string) ($slot['start'] ?? '');
+            $end = (string) ($slot['end'] ?? '');
+            if ($start === '' || $end === '')
+                continue;
+
+            [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
+            [$eh, $em] = array_pad(explode(':', $end), 2, '0');
+            $startMinutes = ((int) $sh) * 60 + ((int) $sm);
+            $endMinutes = ((int) $eh) * 60 + ((int) $em);
+
+            if ($endMinutes <= $startMinutes) {
+                if ($nowMinutes >= $startMinutes || $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            } else {
+                if ($nowMinutes >= $startMinutes && $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function computeIsAvailableNow(?DoctorAvailability $availability): bool
+    {
+        if (!$availability)
+            return false;
+
+        $now = Carbon::now('UTC');
+
+        // Heartbeat gate: must have been active within 15 minutes
+        if (!$availability->last_active_at)
+            return false;
+        if (Carbon::parse($availability->last_active_at)->diffInMinutes($now) > 15)
+            return false;
+
+        if ($availability->manually_offline)
+            return false;
+        if ($availability->manually_online)
+            return true;
+
+        $workingHours = $availability->working_hours;
+        if (!is_array($workingHours))
+            return false;
+
+        $dayKey = strtolower($now->format('l'));
+        return $this->isWithinWorkingHoursSlot($workingHours, $now, $dayKey);
     }
 
     /**
@@ -1644,5 +1840,16 @@ class TextSessionController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Resolve session ID by removing prefixes like 'text_session_'.
+     */
+    private function resolveSessionId($sessionId)
+    {
+        if (is_string($sessionId)) {
+            return str_replace(['text_session_', 'text_session:'], '', $sessionId);
+        }
+        return $sessionId;
     }
 }

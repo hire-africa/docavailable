@@ -3,12 +3,11 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use App\Models\TextSession;
 
-class TextSessionNotification extends Notification implements ShouldQueue
+class TextSessionNotification extends Notification
 {
     use Queueable;
 
@@ -19,7 +18,7 @@ class TextSessionNotification extends Notification implements ShouldQueue
     /**
      * Create a new notification instance.
      */
-    public function __construct(TextSession $textSession, string $type, string $message = null)
+    public function __construct(TextSession $textSession, string $type, ?string $message = null)
     {
         $this->textSession = $textSession;
         $this->type = $type;
@@ -31,9 +30,9 @@ class TextSessionNotification extends Notification implements ShouldQueue
      */
     public function via($notifiable): array
     {
-        $channels = [];
+        $channels = ['database'];
 
-        // Removed 'database' channel to prevent session updates from cluttering the notification history
+        // Add FCM if user has push notifications enabled and a token
         if ($notifiable->push_notifications_enabled && $notifiable->push_token) {
             $channels[] = 'fcm';
         }
@@ -46,13 +45,14 @@ class TextSessionNotification extends Notification implements ShouldQueue
      */
     public function toFcm($notifiable): array
     {
+        $canonicalType = 'text_session_' . $this->type;
         return [
             'notification' => [
                 'title' => $this->getSubject(),
                 'body' => $this->getContent(),
             ],
             'data' => [
-                'type' => 'text_session',
+                'type' => $canonicalType,
                 'session_id' => $this->textSession->id,
                 'notification_type' => $this->type,
                 'click_action' => 'OPEN_TEXT_SESSION',
@@ -65,8 +65,9 @@ class TextSessionNotification extends Notification implements ShouldQueue
      */
     public function toArray($notifiable): array
     {
+        $canonicalType = 'text_session_' . $this->type;
         return [
-            'type' => 'text_session',
+            'type' => $canonicalType,
             'session_id' => $this->textSession->id,
             'notification_type' => $this->type,
             'title' => $this->getSubject(),

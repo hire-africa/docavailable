@@ -41,11 +41,13 @@ class Subscription extends Model
         'payment_metadata' => 'array',
     ];
 
-    public function plan(){
+    public function plan()
+    {
         return $this->belongsTo(Plan::class);
     }
 
-    public function user(){
+    public function user()
+    {
         return $this->belongsTo(User::class);
     }
 
@@ -54,15 +56,17 @@ class Subscription extends Model
      */
     public function getIsActiveAttribute(): bool
     {
-        // First check the explicit is_active field
-        if (isset($this->attributes['is_active'])) {
-            return (bool) $this->attributes['is_active'];
+        // First, if explicitly deactivated in DB, it is not active
+        if (isset($this->attributes['is_active']) && !(bool) $this->attributes['is_active']) {
+            return false;
         }
-        
-        // Fallback to checking status and end date
-        return $this->status == 1 && 
-               $this->end_date && 
-               $this->end_date->isFuture();
+
+        // If the end date has passed, it is no longer active at runtime
+        if ($this->end_date && $this->end_date->isPast()) {
+            return false;
+        }
+
+        return $this->status == 1; // 1 = active
     }
 
     /**
@@ -81,7 +85,7 @@ class Subscription extends Model
         if (!$this->end_date) {
             return 0;
         }
-        
+
         return max(0, Carbon::now()->diffInDays($this->end_date, false));
     }
 
@@ -115,5 +119,85 @@ class Subscription extends Model
     public function activate()
     {
         $this->update(['is_active' => true]);
+    }
+
+    // ─── Stacking Helpers ────────────────────────────────────────────────
+
+    /**
+     * Get the oldest active subscription that still has remaining sessions
+     * of the given type. Used for FIFO deduction.
+     *
+     * @param int    $userId
+     * @param string $sessionType  'text' | 'voice' | 'video'
+     * @return self|null
+     */
+    public static function getOldestActiveForDeduction(int $userId, string $sessionType): ?self
+    {
+        $field = match ($sessionType) {
+            'voice' => 'voice_calls_remaining',
+            'video' => 'video_calls_remaining',
+            default => 'text_sessions_remaining',
+        };
+
+        return static::where('user_id', $userId)
+            ->where('is_active', true)
+            ->where('status', 1)
+            ->whereNotNull('end_date')
+            ->where('end_date', '>', now())
+            ->where($field, '>', 0)
+            ->orderBy('start_date', 'asc')   // oldest first
+            ->orderBy('id', 'asc')
+            ->first();
+    }
+
+    /**
+     * Get aggregated remaining sessions across all active subscriptions.
+     * Used for API display so the user sees a single combined total.
+     *
+     * @param int $userId
+     * @return array{text_sessions_remaining: int, voice_calls_remaining: int, video_calls_remaining: int, subscriptions: \Illuminate\Support\Collection}
+     */
+    public static function getAggregatedSessions(int $userId): array
+    {
+        $subs = static::where('user_id', $userId)
+            ->where('is_active', true)
+            ->where('status', 1)
+            ->whereNotNull('end_date')
+            ->where('end_date', '>', now())
+            ->orderBy('start_date', 'asc')
+            ->get();
+
+        return [
+            'text_sessions_remaining' => $subs->sum('text_sessions_remaining'),
+            'voice_calls_remaining' => $subs->sum('voice_calls_remaining'),
+            'video_calls_remaining' => $subs->sum('video_calls_remaining'),
+            'total_text_sessions' => $subs->sum('total_text_sessions'),
+            'total_voice_calls' => $subs->sum('total_voice_calls'),
+            'total_video_calls' => $subs->sum('total_video_calls'),
+            'subscriptions' => $subs,
+        ];
+    }
+
+    /**
+     * Get total remaining sessions of a given type across all active subscriptions.
+     *
+     * @param int    $userId
+     * @param string $sessionType 'text' | 'voice' | 'video'
+     * @return int
+     */
+    public static function getTotalRemaining(int $userId, string $sessionType): int
+    {
+        $field = match ($sessionType) {
+            'voice' => 'voice_calls_remaining',
+            'video' => 'video_calls_remaining',
+            default => 'text_sessions_remaining',
+        };
+
+        return (int) static::where('user_id', $userId)
+            ->where('is_active', true)
+            ->where('status', 1)
+            ->whereNotNull('end_date')
+            ->where('end_date', '>', now())
+            ->sum($field);
     }
 }

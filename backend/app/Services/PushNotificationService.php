@@ -133,13 +133,7 @@ class PushNotificationService
 
         // Determine channel based on notification type
         $type = $data['type'] ?? '';
-        $channelId = 'calls'; // default
-
-        if (str_contains($type, 'chat_message') || str_contains($type, 'new_message')) {
-            $channelId = 'messages';
-        } elseif (str_contains($type, 'appointment')) {
-            $channelId = 'appointments';
-        }
+        $channelId = 'urgent_medical';
 
         // FCM V1 API payload structure - send to each token individually
         $results = [];
@@ -166,7 +160,7 @@ class PushNotificationService
                         'notification' => [
                             'sound' => 'default',
                             'channel_id' => $channelId,
-                            'notification_priority' => $channelId === 'calls' ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
+                            'notification_priority' => 'PRIORITY_MAX',
                             'visibility' => 'PUBLIC'
                         ],
                     ],

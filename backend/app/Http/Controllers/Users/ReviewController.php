@@ -13,7 +13,9 @@ class ReviewController extends Controller
     {
         try {
             $limit = (int) $request->query('limit', 10);
-            if ($limit <= 0 || $limit > 50) { $limit = 10; }
+            if ($limit <= 0 || $limit > 50) {
+                $limit = 10;
+            }
 
             $reviews = Reviews::with(['reviewer'])
                 ->where('doctor_id', $id)
@@ -53,7 +55,7 @@ class ReviewController extends Controller
         try {
             $user = auth()->user();
             $reviews = $user->reviews()->with('user')->get();
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $reviews
@@ -68,37 +70,79 @@ class ReviewController extends Controller
 
     public function create_review(ReviewRequest $request)
     {
-        if (!auth()->user()->isPatient()) {
-            return response()->json(['error' => 'Only patients can write reviews'], 403);
-        }
-        $user = User::find(auth()->user()->id);
-        $user->reviews()->create([
+        $doctorId = $request->reviewer_id; // MISMATCH: reviewer_id in request seems to be the doctor ID in old frontend
+        $patientId = auth()->id();
+
+        $review = Reviews::create([
+            'doctor_id' => $doctorId,
+            'user_id' => $doctorId,
+            'patient_id' => $patientId,
+            'reviewer_id' => $patientId,
             'rating' => $request->rating,
             'comment' => $request->comment,
-            'reviewer_id' => $request->reviewer_id,
+            'status' => 'approved'
         ]);
-        return response()->json($user->reviews);
+
+        $this->updateDoctorStats($doctorId);
+
+        return response()->json([
+            'success' => true,
+            'data' => $review
+        ]);
     }
 
-    public function update_review(ReviewRequest $request)
+    public function update_review(ReviewRequest $request, $id)
     {
-        if (!auth()->user()->isPatient()) {
-            return response()->json(['error' => 'Only patients can write reviews'], 403);
+        $review = Reviews::findOrFail($id);
+
+        if ($review->reviewer_id !== auth()->id()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
         }
-        $user = User::find(auth()->user()->id);
-        $user->reviews()->update([
-            'rating' => $request->rating,
-            'comment' => $request->comment,
-            'reviewer_id' => $request->reviewer_id,
+
+        $review->update([
+            'rating' => $request->rating ?? $review->rating,
+            'comment' => $request->comment ?? $review->comment,
+            'status' => 'approved'
         ]);
-        return response()->json($user->reviews);
+
+        $this->updateDoctorStats($review->doctor_id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $review
+        ]);
+    }
+
+    private function updateDoctorStats($doctorId)
+    {
+        $doctor = User::find($doctorId);
+        if ($doctor) {
+            $avgRating = Reviews::where('doctor_id', $doctorId)
+                ->where('status', 'approved')
+                ->avg('rating');
+
+            $totalRatings = Reviews::where('doctor_id', $doctorId)
+                ->where('status', 'approved')
+                ->count();
+
+            $doctor->update([
+                'rating' => round($avgRating, 1),
+                'total_ratings' => $totalRatings
+            ]);
+        }
     }
 
     public function delete_review($id)
     {
         $review = Reviews::findOrFail($id);
+        $doctorId = $review->doctor_id;
         $review->delete();
-        return response()->json(['message' => 'Review deleted successfully']);
+
+        if ($doctorId) {
+            $this->updateDoctorStats($doctorId);
+        }
+
+        return response()->json(['success' => true, 'message' => 'Review deleted successfully']);
     }
 
     public function createDoctorRating(Request $request, $doctorId, $patientId)
@@ -119,7 +163,7 @@ class ReviewController extends Controller
             ]);
 
             $user = auth()->user();
-            
+
             // Verify the patient is the one making the request
             if ($user->id != $patientId) {
                 \Log::warning('❌ [Rating] Unauthorized rating attempt', [
@@ -165,37 +209,7 @@ class ReviewController extends Controller
                 'rating' => $rating->rating
             ]);
 
-            // Update doctor's average rating
-            $doctor = \App\Models\User::find($doctorId);
-            if ($doctor) {
-                $avgRating = Reviews::where('doctor_id', $doctorId)
-                    ->where('status', 'approved')
-                    ->avg('rating');
-                
-                $totalRatings = Reviews::where('doctor_id', $doctorId)
-                    ->where('status', 'approved')
-                    ->count();
-                
-                $oldRating = $doctor->rating;
-                $oldTotalRatings = $doctor->total_ratings;
-                
-                $doctor->update([
-                    'rating' => round($avgRating, 1),
-                    'total_ratings' => $totalRatings
-                ]);
-
-                \Log::info('✅ [Rating] Doctor rating updated', [
-                    'doctor_id' => $doctorId,
-                    'old_rating' => $oldRating,
-                    'new_rating' => round($avgRating, 1),
-                    'old_total_ratings' => $oldTotalRatings,
-                    'new_total_ratings' => $totalRatings
-                ]);
-            } else {
-                \Log::error('❌ [Rating] Doctor not found', [
-                    'doctor_id' => $doctorId
-                ]);
-            }
+            $this->updateDoctorStats($doctorId);
 
             return response()->json([
                 'success' => true,
@@ -220,7 +234,7 @@ class ReviewController extends Controller
     {
         try {
             $user = auth()->user();
-            
+
             // Verify the patient is the one making the request
             if ($user->id != $patientId) {
                 return response()->json([

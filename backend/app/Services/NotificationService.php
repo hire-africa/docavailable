@@ -17,21 +17,21 @@ class NotificationService
     /**
      * Send appointment notification
      */
-    public function sendAppointmentNotification(Appointment $appointment, string $type, string $message = null): void
+    public function sendAppointmentNotification(Appointment $appointment, string $type, ?string $message = null): void
     {
         try {
             $notification = new AppointmentNotification($appointment, $type, $message);
-            
+
             // Send to patient
             if ($appointment->patient) {
                 $appointment->patient->notify($notification);
             }
-            
+
             // Send to doctor (for certain types)
             if (in_array($type, ['created', 'cancelled', 'reschedule_accepted', 'reschedule_rejected']) && $appointment->doctor) {
                 $appointment->doctor->notify($notification);
             }
-            
+
             Log::info("Appointment notification sent", [
                 'appointment_id' => $appointment->id,
                 'type' => $type,
@@ -49,21 +49,21 @@ class NotificationService
     /**
      * Send text session notification
      */
-    public function sendTextSessionNotification(TextSession $textSession, string $type, string $message = null): void
+    public function sendTextSessionNotification(TextSession $textSession, string $type, ?string $message = null): void
     {
         try {
             $notification = new TextSessionNotification($textSession, $type, $message);
-            
+
             // Send to patient
             if ($textSession->patient) {
                 $textSession->patient->notify($notification);
             }
-            
+
             // Send to doctor
             if ($textSession->doctor) {
                 $textSession->doctor->notify($notification);
             }
-            
+
             Log::info("Text session notification sent", [
                 'session_id' => $textSession->id,
                 'type' => $type,
@@ -95,10 +95,10 @@ class NotificationService
 
             // Notify patient
             if ($patient) {
-                $message = $modality === 'text' 
+                $message = $modality === 'text'
                     ? "Your appointment session is ready. You can now start chatting with Dr. {$doctor->first_name} {$doctor->last_name}."
                     : "Your appointment {$modality} call is starting now.";
-                
+
                 $this->sendAppointmentNotification($appointment, 'session_started', $message);
             }
 
@@ -107,7 +107,7 @@ class NotificationService
                 $message = $modality === 'text'
                     ? "Your appointment with {$patient->first_name} {$patient->last_name} is ready. The patient can now start chatting."
                     : "Your appointment {$modality} call with {$patient->first_name} {$patient->last_name} is starting now.";
-                
+
                 // Use appointment notification for doctor as well
                 $notification = new AppointmentNotification($appointment, 'session_started', $message);
                 $doctor->notify($notification);
@@ -132,16 +132,16 @@ class NotificationService
     /**
      * Send wallet notification
      */
-    public function sendWalletNotification(WalletTransaction $transaction, string $type, string $message = null): void
+    public function sendWalletNotification(WalletTransaction $transaction, string $type, ?string $message = null): void
     {
         try {
             $notification = new WalletNotification($transaction, $type, $message);
-            
+
             // Send to doctor
             if ($transaction->doctor) {
                 $transaction->doctor->notify($notification);
             }
-            
+
             Log::info("Wallet notification sent", [
                 'transaction_id' => $transaction->id,
                 'type' => $type,
@@ -163,7 +163,7 @@ class NotificationService
         try {
             $notification = new \App\Notifications\CustomNotification($title, $message, $data);
             $user->notify($notification);
-            
+
             Log::info("Custom notification sent", [
                 'user_id' => $user->id,
                 'title' => $title,
@@ -183,13 +183,13 @@ class NotificationService
     {
         try {
             $notification = new \App\Notifications\CustomNotification($title, $message, $data);
-            
+
             foreach ($users as $user) {
                 if ($user instanceof User) {
                     $user->notify($notification);
                 }
             }
-            
+
             Log::info("Bulk notifications sent", [
                 'user_count' => count($users),
                 'title' => $title,
@@ -209,16 +209,16 @@ class NotificationService
     {
         try {
             $tomorrow = now()->addDay()->format('Y-m-d');
-            
+
             $appointments = Appointment::where('appointment_date', $tomorrow)
                 ->where('status', 0) // Confirmed appointments
                 ->with(['patient', 'doctor'])
                 ->get();
-            
+
             foreach ($appointments as $appointment) {
                 $this->sendAppointmentNotification($appointment, 'reminder');
             }
-            
+
             Log::info("Appointment reminders sent", [
                 'count' => $appointments->count(),
                 'date' => $tomorrow,
@@ -229,22 +229,88 @@ class NotificationService
     }
 
     /**
+     * Send 10-minute appointment reminder notifications to both patient and doctor
+     */
+    public function send10MinAppointmentReminders(): int
+    {
+        try {
+            // Find appointments that are starting in exactly 10 minutes (using a 1-minute window since this runs every minute)
+            $now = now();
+            $targetTime = $now->copy()->addMinutes(10);
+
+            $targetDate = $targetTime->format('Y-m-d');
+            $targetTimeStr = $targetTime->format('H:i'); // 24-hour hour and minute
+
+            Log::info("Checking for 10-min reminders", [
+                'target_date' => $targetDate,
+                'target_time' => $targetTimeStr
+            ]);
+
+            $appointments = Appointment::where('appointment_date', $targetDate)
+                // Use LIKE to match the hour/minute since Time fields might have seconds (e.g., 14:30:00)
+                ->where('appointment_time', 'LIKE', $targetTimeStr . '%')
+                ->where('status', 0) // Confirmed appointments
+                ->with(['patient', 'doctor'])
+                ->get();
+
+            foreach ($appointments as $appointment) {
+                // Determine modality
+                $modality = strtolower($appointment->appointment_type ?? $appointment->consultation_type ?? 'text');
+
+                // Patient message
+                $patientMessage = $modality === 'text'
+                    ? "Your appointment is starting in 10 minutes. You can enter the session now."
+                    : "Your {$modality} call appointment is starting in 10 minutes. You can enter the session now.";
+
+                // Doctor message
+                $doctorMessage = $modality === 'text'
+                    ? "Your appointment with {$appointment->patient->first_name} is starting in 10 minutes."
+                    : "Your {$modality} call with {$appointment->patient->first_name} is starting in 10 minutes.";
+
+                // Send to patient (type 'reminder_10_min')
+                if ($appointment->patient) {
+                    $patientNotification = new AppointmentNotification($appointment, 'reminder_10_min', $patientMessage);
+                    $appointment->patient->notify($patientNotification);
+                }
+
+                // Send to doctor (type 'reminder_10_min')
+                if ($appointment->doctor) {
+                    $doctorNotification = new AppointmentNotification($appointment, 'reminder_10_min', $doctorMessage);
+                    $appointment->doctor->notify($doctorNotification);
+                }
+            }
+
+            $count = $appointments->count();
+            if ($count > 0) {
+                Log::info("10-minute appointment reminders sent", [
+                    'count' => $count,
+                    'datetime' => $targetTime->toDateTimeString(),
+                ]);
+            }
+            return $count;
+        } catch (\Exception $e) {
+            Log::error("Failed to send 10-minute appointment reminders: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
      * Send session expiration warnings
      */
     public function sendSessionExpirationWarnings(): void
     {
         try {
             $warningTime = now()->subMinutes(8); // 2 minutes before expiration
-            
+
             $sessions = TextSession::where('status', 'active')
                 ->where('last_activity_at', '<=', $warningTime)
                 ->with(['patient', 'doctor'])
                 ->get();
-            
+
             foreach ($sessions as $session) {
                 $this->sendTextSessionNotification($session, 'session_warning');
             }
-            
+
             Log::info("Session expiration warnings sent", [
                 'count' => $sessions->count(),
             ]);
@@ -266,7 +332,7 @@ class NotificationService
             } else {
                 $recipient = $appointment->patient;
             }
-            
+
             if (!$recipient) {
                 Log::warning("No recipient found for chat notification", [
                     'appointment_id' => $appointment->id,
@@ -274,27 +340,18 @@ class NotificationService
                 ]);
                 return;
             }
-            
-            // Don't send notification if recipient has disabled push notifications
-            if (!$recipient->push_notifications_enabled || !$recipient->push_token) {
-                Log::info("Recipient has disabled push notifications", [
-                    'recipient_id' => $recipient->id,
-                    'appointment_id' => $appointment->id
-                ]);
-                return;
-            }
-            
+
             // Send the notification
             $notification = new ChatMessageNotification($sender, $appointment, $message, $messageId);
             $recipient->notify($notification);
-            
+
             Log::info("Chat notification sent successfully", [
                 'appointment_id' => $appointment->id,
                 'sender_id' => $sender->id,
                 'recipient_id' => $recipient->id,
                 'message_id' => $messageId
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error("Failed to send chat notification: " . $e->getMessage(), [
                 'appointment_id' => $appointment->id,
@@ -311,13 +368,13 @@ class NotificationService
     {
         $totalNotifications = $user->notifications()->count();
         $unreadNotifications = $user->unreadNotifications()->count();
-        
+
         $notificationsByType = $user->notifications()
             ->selectRaw('JSON_EXTRACT(data, "$.type") as notification_type, COUNT(*) as count')
             ->groupBy('notification_type')
             ->get()
             ->pluck('count', 'notification_type');
-        
+
         return [
             'total_notifications' => $totalNotifications,
             'unread_notifications' => $unreadNotifications,
@@ -376,4 +433,4 @@ class NotificationService
             ]);
         }
     }
-} 
+}

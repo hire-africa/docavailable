@@ -3,12 +3,11 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use App\Models\Subscription;
 
-class SubscriptionNotification extends Notification implements ShouldQueue
+class SubscriptionNotification extends Notification
 {
     use Queueable;
 
@@ -65,13 +64,14 @@ class SubscriptionNotification extends Notification implements ShouldQueue
      */
     public function toFcm($notifiable): array
     {
+        $canonicalType = 'subscription_' . $this->type;
         return [
             'notification' => [
                 'title' => $this->getSubject(),
                 'body' => $this->getContent(),
             ],
             'data' => [
-                'type' => 'subscription',
+                'type' => $canonicalType,
                 'subscription_id' => $this->subscription->id,
                 'notification_type' => $this->type,
                 'click_action' => 'OPEN_SUBSCRIPTION',
@@ -85,9 +85,10 @@ class SubscriptionNotification extends Notification implements ShouldQueue
     public function toArray($notifiable): array
     {
         $plan = $this->subscription->plan;
+        $canonicalType = 'subscription_' . $this->type;
 
         return [
-            'type' => 'subscription',
+            'type' => $canonicalType,
             'subscription_id' => $this->subscription->id,
             'notification_type' => $this->type,
             'title' => $this->getSubject(),

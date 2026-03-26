@@ -3,18 +3,11 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use App\Models\TextSession;
-use NotificationChannels\Fcm\FcmChannel;
-use NotificationChannels\Fcm\FcmMessage;
-use NotificationChannels\Fcm\Resources\AndroidConfig;
-use NotificationChannels\Fcm\Resources\AndroidNotification;
-use NotificationChannels\Fcm\Resources\ApnsConfig;
-use NotificationChannels\Fcm\Resources\ApnsFcmOptions;
 
-class ScheduledSessionActivated extends Notification implements ShouldQueue
+class ScheduledSessionActivated extends Notification
 {
     use Queueable;
 
@@ -39,7 +32,11 @@ class ScheduledSessionActivated extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return [FcmChannel::class, 'database'];
+        $channels = ['database'];
+        if ($notifiable->push_notifications_enabled && !empty($notifiable->push_token)) {
+            $channels[] = 'fcm';
+        }
+        return $channels;
     }
 
     /**
@@ -53,31 +50,25 @@ class ScheduledSessionActivated extends Notification implements ShouldQueue
             ->line('Thank you for using our application!');
     }
 
-    public function toFcm($notifiable)
+    public function toFcm($notifiable): array
     {
         $title = 'Scheduled Session Active';
         $body = "Your {$this->sessionTypeDisplay} with {$this->patientName} is now active. Tap to join.";
+        $canonicalType = 'text_session_scheduled_activated';
 
-        return FcmMessage::create()
-            ->setData([
-                'type' => 'scheduled_session_activated',
+        return [
+            'notification' => [
+                'title' => $title,
+                'body' => $body,
+            ],
+            'data' => [
+                'type' => $canonicalType,
+                'notification_type' => 'scheduled_activated',
                 'session_id' => (string) $this->session->id,
                 'session_type' => $this->session->session_type,
                 'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-            ])
-            ->setNotification(
-                \NotificationChannels\Fcm\Resources\Notification::create()
-                    ->setTitle($title)
-                    ->setBody($body)
-            )
-            ->setAndroid(
-                AndroidConfig::create()
-                    ->setFcmOptions(AndroidNotification::create()->setColor('#0A0A0A'))
-                    ->setNotification(AndroidNotification::create()->setChannelId('appointments_channel'))
-            )->setApns(
-                ApnsConfig::create()
-                    ->setFcmOptions(ApnsFcmOptions::create()->setAnalyticsLabel('analytics_ios'))
-            );
+            ],
+        ];
     }
 
     /**
@@ -87,8 +78,10 @@ class ScheduledSessionActivated extends Notification implements ShouldQueue
      */
     public function toArray(object $notifiable): array
     {
+        $canonicalType = 'text_session_scheduled_activated';
         return [
-            'type' => 'scheduled_session_activated',
+            'type' => $canonicalType,
+            'notification_type' => 'scheduled_activated',
             'session_id' => $this->session->id,
             'session_type' => $this->session->session_type,
             'patient_name' => $this->patientName,

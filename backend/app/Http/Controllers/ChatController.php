@@ -122,6 +122,10 @@ class ChatController extends Controller
      */
     private function handleAppointmentIdAndVerifyAccess($appointmentId, $user)
     {
+        Log::warning("[ChatController] handleAppointmentIdAndVerifyAccess started", [
+            'appointmentId' => $appointmentId,
+            'user_id' => $user->id
+        ]);
         // Handle direct session ID format (direct_session_12345) - instant calls
         if (strpos($appointmentId, 'direct_session_') === 0) {
             $callSession = \App\Models\CallSession::with(['patient', 'doctor'])
@@ -146,6 +150,10 @@ class ChatController extends Controller
                 ];
             }
 
+            Log::error("[ChatController] handleAppointmentIdAndVerifyAccess - direct session not found", [
+                'appointment_id' => $appointmentId,
+                'user_id' => $user->id
+            ]);
             return [
                 'success' => false,
                 'message' => 'Direct session not found',
@@ -202,6 +210,12 @@ class ChatController extends Controller
                 ];
             }
 
+            Log::error("[ChatController] handleAppointmentIdAndVerifyAccess - session not found", [
+                'actualId' => $actualId,
+                'appointmentId_param' => $appointmentId,
+                'isTextSession' => $isTextSession,
+                'user_id' => $user->id
+            ]);
             return [
                 'success' => false,
                 'message' => 'Appointment or text session not found',
@@ -246,9 +260,9 @@ class ChatController extends Controller
     public function getMessages(Request $request, $appointmentId): JsonResponse
     {
         $user = Auth::user();
-        Log::info("[ChatController] getMessages requested", [
+        Log::warning("[ChatController] getMessages requested", [
             'appointmentId_param' => $appointmentId,
-            'user_id' => $user->id
+            'user_id' => $user ? $user->id : 'unauthenticated'
         ]);
 
         // Handle direct session ID format (direct_session_12345) - instant calls
@@ -339,6 +353,11 @@ class ChatController extends Controller
                 ]);
             }
 
+            Log::error("[ChatController] getMessages - session not found", [
+                'actualId' => $actualId,
+                'isTextSession' => $isTextSession,
+                'user_id' => $user->id
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Appointment or text session not found'
@@ -768,6 +787,10 @@ class ChatController extends Controller
     public function getChatInfo($appointmentId): JsonResponse
     {
         $user = Auth::user();
+        Log::warning("[ChatController] getChatInfo requested", [
+            'appointmentId' => $appointmentId,
+            'user_id' => $user ? $user->id : 'unauthenticated'
+        ]);
 
         // Handle direct session ID format (direct_session_12345) - instant calls
         // IMPORTANT: Direct sessions are instant calls with no appointment record
@@ -1859,6 +1882,11 @@ class ChatController extends Controller
      */
     public function getChatHistory(Request $request, string $conversationId): JsonResponse
     {
+        $user = Auth::user();
+        Log::warning("[ChatController] getChatHistory requested", [
+            'conversationId' => $conversationId,
+            'user_id' => $user ? $user->id : 'unauthenticated'
+        ]);
         // Validate pagination parameters
         $request->validate([
             'page' => 'nullable|integer|min:1',

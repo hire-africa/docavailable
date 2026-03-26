@@ -42,19 +42,28 @@ class IncomingCallNotification extends Notification
             'data' => [
                 'type' => 'incoming_call',
                 'isIncomingCall' => 'true',
-                'appointment_id' => (string)($this->callSession->appointment_id ?? $this->callSession->id),
+                'appointment_id' => (string) ($this->callSession->appointment_id ?? $this->callSession->id),
                 'call_type' => $callType,
                 'doctor_name' => $callerName,
                 'doctorName' => $callerName,
-                'caller_id' => (string)($this->caller->id ?? ''),
-                'doctor_id' => (string)($this->callSession->doctor_id ?? ''),
+                'caller_id' => (string) ($this->caller->id ?? ''),
+                'doctor_id' => (string) ($this->callSession->doctor_id ?? ''),
                 'doctor_profile_picture' => $this->caller->profile_picture_url ?? $this->caller->profile_picture ?? '',
                 'doctorProfilePicture' => $this->caller->profile_picture_url ?? $this->caller->profile_picture ?? '',
-                'call_session_id' => (string)$this->callSession->id,
+                'call_session_id' => (string) $this->callSession->id,
                 'started_at' => $this->callSession->started_at?->toIso8601String() ?? now()->toIso8601String(),
+            ],
+            'notification' => [
+                'title' => $callerName . ' - ' . ($callType === 'video' ? 'Video Call' : 'Voice Call'),
+                'body' => 'Incoming call...',
             ],
             'android' => [
                 'priority' => 'high', // Ensures immediate delivery
+                'notification' => [
+                    'channel_id' => 'incoming_calls_v3',
+                    'sound' => 'ringtone',
+                    'default_sound' => false,
+                ],
             ],
             'apns' => [
                 'payload' => [
@@ -89,11 +98,11 @@ class IncomingCallNotification extends Notification
     private function getCallerDisplayName(): string
     {
         $fullName = trim(($this->caller->first_name ?? '') . ' ' . ($this->caller->last_name ?? ''));
-        
+
         if ($this->caller->user_type === 'doctor' || $this->caller->role === 'doctor') {
             return 'Dr. ' . $fullName;
         }
-        
+
         // For patients, return their full name or fallback to email
         return $fullName ?: ($this->caller->email ?? 'Patient');
     }

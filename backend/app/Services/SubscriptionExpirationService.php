@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Subscription;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -24,19 +25,19 @@ class SubscriptionExpirationService
         ];
 
         try {
-            // Get all subscriptions that are currently marked as active
-            // We only process subscriptions with status = 1 (active) and is_active = true
-            $activeSubscriptions = Subscription::where('status', 1)
-                ->where('is_active', true)
-                ->whereNotNull('end_date')
+            // Get all subscriptions that have an end date in the past
+            // We process them regardless of status to ensure cleanup
+            $now = Carbon::now();
+            $expiredCandidates = Subscription::whereNotNull('end_date')
+                ->where('end_date', '<', $now)
                 ->with('plan')
                 ->get();
 
-            Log::info("Processing subscription expirations", [
-                'total_active' => $activeSubscriptions->count()
+            Log::info("Processing subscription candidates for expiration", [
+                'count' => $expiredCandidates->count()
             ]);
 
-            foreach ($activeSubscriptions as $subscription) {
+            foreach ($expiredCandidates as $subscription) {
                 try {
                     $result = $this->processSubscription($subscription);
                     $stats[$result]++;
@@ -73,11 +74,6 @@ class SubscriptionExpirationService
     public function processSubscription(Subscription $subscription): string
     {
         $now = Carbon::now();
-        
-        // Safety check: only process if subscription is still active
-        if ($subscription->status != 1 || !$subscription->is_active) {
-            return 'skipped';
-        }
 
         // Safety check: must have end_date
         if (!$subscription->end_date) {
@@ -88,19 +84,17 @@ class SubscriptionExpirationService
         }
 
         $currentEndDate = Carbon::parse($subscription->end_date);
-        
-        // Calculate original end_date from start_date + plan duration
-        // This is needed to determine if roll-over has already been applied
-        $originalEndDate = $this->calculateOriginalEndDate($subscription);
-        
+
         // Check if subscription has passed its end date
         if ($now->isAfter($currentEndDate)) {
             // Check for 30-day plan roll-over eligibility
             // Use original end_date for roll-over check, not current end_date
+            $originalEndDate = $this->calculateOriginalEndDate($subscription);
+
             if ($this->isEligibleForRollover($subscription, $originalEndDate, $now)) {
                 return $this->applyRollover($subscription, $originalEndDate);
             } else {
-                // Normal expiration: mark as expired
+                // Normal expiration: mark as expired and delete
                 return $this->expireSubscription($subscription);
             }
         }
@@ -128,7 +122,7 @@ class SubscriptionExpirationService
         if ($subscription->start_date) {
             $startDate = Carbon::parse($subscription->start_date);
             $planDuration = $this->getPlanDuration($subscription);
-            
+
             if ($planDuration > 0) {
                 return $startDate->copy()->addDays($planDuration);
             }
@@ -190,12 +184,12 @@ class SubscriptionExpirationService
             $startDate = Carbon::parse($subscription->start_date);
             $endDate = Carbon::parse($subscription->end_date);
             $calculatedDuration = $startDate->diffInDays($endDate);
-            
+
             // If calculated duration is close to 30 days (within 2 days tolerance), assume 30-day plan
             if ($calculatedDuration >= 28 && $calculatedDuration <= 32) {
                 return 30;
             }
-            
+
             return $calculatedDuration;
         }
 
@@ -212,24 +206,9 @@ class SubscriptionExpirationService
      */
     protected function hasRolloverBeenApplied(Subscription $subscription, Carbon $originalEndDate): bool
     {
-        // Method 1: Check payment_metadata for roll_over flag (most reliable)
+        // Check payment_metadata for rollover_applied flag (reliable)
         $metadata = $subscription->payment_metadata ?? [];
-        if (isset($metadata['rollover_applied']) && $metadata['rollover_applied'] === true) {
-            return true;
-        }
-
-        // Method 2: Infer from end_date comparison
-        // If current end_date is more than 7 days beyond the original end_date, roll-over was applied
-        $currentEndDate = Carbon::parse($subscription->end_date);
-        $daysDifference = $originalEndDate->diffInDays($currentEndDate, false);
-        
-        // If end_date is 7 days (or more) beyond original, roll-over was applied
-        // Use tolerance of 6-8 days to account for any date calculation differences
-        if ($daysDifference >= 6) {
-            return true;
-        }
-
-        return false;
+        return isset($metadata['rollover_applied']) && $metadata['rollover_applied'] === true;
     }
 
     /**
@@ -243,7 +222,7 @@ class SubscriptionExpirationService
     {
         try {
             $newEndDate = $originalEndDate->copy()->addDays(7);
-            
+
             // Update subscription with new end_date and mark roll-over in metadata
             $metadata = $subscription->payment_metadata ?? [];
             $metadata['rollover_applied'] = true;
@@ -286,21 +265,20 @@ class SubscriptionExpirationService
     protected function expireSubscription(Subscription $subscription): string
     {
         try {
-            // Update status to 2 (expired) and set is_active to false
-            // Do NOT modify start_date or delete subscription
-            $subscription->update([
-                'status' => 2, // 2 = expired
-                'is_active' => false,
-            ]);
-
-            Log::info("Subscription expired", [
-                'subscription_id' => $subscription->id,
-                'user_id' => $subscription->user_id,
-                'end_date' => $subscription->end_date->toISOString(),
-            ]);
-
             // Send notification if notification service is available
             $this->sendExpirationNotification($subscription);
+
+            $subscriptionId = $subscription->id;
+            $userId = $subscription->user_id;
+            $endDate = $subscription->end_date ? $subscription->end_date->toISOString() : null;
+
+            $subscription->delete();
+
+            Log::info("Subscription expired and deleted", [
+                'subscription_id' => $subscriptionId,
+                'user_id' => $userId,
+                'end_date' => $endDate,
+            ]);
 
             return 'expired';
         } catch (\Exception $e) {

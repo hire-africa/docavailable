@@ -3,11 +3,10 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class DoctorRejectedNotification extends Notification implements ShouldQueue
+class DoctorRejectedNotification extends Notification
 {
     use Queueable;
 
@@ -26,7 +25,11 @@ class DoctorRejectedNotification extends Notification implements ShouldQueue
      */
     public function via($notifiable): array
     {
-        return ['mail', 'database'];
+        $channels = ['mail', 'database'];
+        if ($notifiable->push_notifications_enabled && !empty($notifiable->push_token)) {
+            $channels[] = 'fcm';
+        }
+        return $channels;
     }
 
     /**
@@ -57,13 +60,33 @@ class DoctorRejectedNotification extends Notification implements ShouldQueue
      */
     public function toArray($notifiable): array
     {
+        $canonicalType = 'doctor_rejected';
         return [
-            'type' => 'doctor_rejected',
-            'notification_type' => 'doctor_rejected',
+            'type' => $canonicalType,
+            'notification_type' => 'rejected',
             'title' => 'Account Update',
             'message' => 'Your doctor account application was not approved. Please check your email for details.',
             'data' => [
                 'reason' => $this->reason,
+            ],
+        ];
+    }
+
+    /**
+     * Get the FCM representation of the notification.
+     */
+    public function toFcm($notifiable): array
+    {
+        $canonicalType = 'doctor_rejected';
+        return [
+            'notification' => [
+                'title' => 'Account Update',
+                'body' => 'Your doctor account application was not approved. Please check your email for details.',
+            ],
+            'data' => [
+                'type' => $canonicalType,
+                'notification_type' => 'rejected',
+                'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
             ],
         ];
     }

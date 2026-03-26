@@ -55,42 +55,49 @@ class SessionCreationService
         ?int $appointmentId = null
     ): array {
         try {
-            // Get patient's subscription
-            $subscription = Subscription::where('user_id', $patientId)
-                ->where('is_active', true)
-                ->first();
+            // Get patient's aggregated sessions across all active subscriptions
+            $totalTextRemaining = Subscription::getTotalRemaining($patientId, 'text');
 
-            if (!$subscription) {
+            if ($totalTextRemaining <= 0) {
                 return [
                     'success' => false,
                     'session' => null,
-                    'message' => 'No active subscription found for patient'
+                    'message' => 'No active subscription found with text sessions remaining'
                 ];
             }
 
-            $sessionsRemaining = $subscription->text_sessions_remaining;
-
-            if ($sessionsRemaining <= 0) {
-                return [
-                    'success' => false,
-                    'session' => null,
-                    'message' => 'You have no text sessions remaining in your subscription. Please upgrade your plan or wait for renewal.'
-                ];
-            }
+            $sessionsRemaining = $totalTextRemaining;
 
             // Use transaction to ensure atomicity and prevent race conditions
             $windowSeconds = (int) config('app.text_session_response_window', 300);
 
             $textSession = DB::transaction(function () use ($patientId, $doctorId, $reason, $sessionsRemaining, $appointmentId, $windowSeconds) {
-                // Lock and check for existing session again within transaction
-                $existingSession = TextSession::where('patient_id', $patientId)
-                    ->where('doctor_id', $doctorId)
+                // Lock and check for existing session for PATIENT within transaction
+                $existingPatientSession = TextSession::where('patient_id', $patientId)
                     ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])
                     ->lockForUpdate()
                     ->first();
 
-                if ($existingSession) {
-                    throw new \Exception('You already have an active session with this doctor');
+                if ($existingPatientSession) {
+                    throw new \Exception('You already have an active session');
+                }
+
+                // Check if DOCTOR is currently in another session (with anyone)
+                $doctorBusyInText = TextSession::where('doctor_id', $doctorId)
+                    ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])
+                    ->exists();
+
+                $doctorBusyInCall = CallSession::where('doctor_id', $doctorId)
+                    ->whereIn('status', [
+                        CallSession::STATUS_ACTIVE,
+                        CallSession::STATUS_CONNECTING,
+                        CallSession::STATUS_WAITING_FOR_DOCTOR,
+                        CallSession::STATUS_ANSWERED,
+                    ])
+                    ->exists();
+
+                if ($doctorBusyInText || $doctorBusyInCall) {
+                    throw new \Exception('Doctor is currently in another session');
                 }
 
                 // Create text session
@@ -233,14 +240,12 @@ class SessionCreationService
                 ];
             }
 
-            // Get subscription for remaining sessions count
-            $subscription = Subscription::where('user_id', $patientId)->first();
+            // Get aggregated subscription remaining for this call type
             $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-            $sessionsRemainingBeforeStart = $subscription ? $subscription->$callTypeField : 0;
+            $sessionsRemainingBeforeStart = Subscription::getTotalRemaining($patientId, $callType);
 
-            // Check if there's already an active call session
-            $existingSession = CallSession::where('patient_id', $patientId)
-                ->where('doctor_id', $doctorId)
+            // Patient-level active session guard
+            $anyExistingCall = CallSession::where('patient_id', $patientId)
                 ->whereIn('status', [
                     CallSession::STATUS_ACTIVE,
                     CallSession::STATUS_CONNECTING,
@@ -249,11 +254,33 @@ class SessionCreationService
                 ])
                 ->first();
 
-            if ($existingSession) {
+            if ($anyExistingCall && $anyExistingCall->appointment_id !== (string) $appointmentId) {
                 return [
                     'success' => false,
                     'session' => null,
-                    'message' => 'You already have an active call session with this doctor'
+                    'message' => 'You already have an active call session. Please end it before starting a new one.'
+                ];
+            }
+
+            // Doctor-level active session guard
+            $doctorBusyInText = TextSession::where('doctor_id', $doctorId)
+                ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])
+                ->exists();
+
+            $doctorBusyInCall = CallSession::where('doctor_id', $doctorId)
+                ->whereIn('status', [
+                    CallSession::STATUS_ACTIVE,
+                    CallSession::STATUS_CONNECTING,
+                    CallSession::STATUS_WAITING_FOR_DOCTOR,
+                    CallSession::STATUS_ANSWERED,
+                ])
+                ->exists();
+
+            if ($doctorBusyInText || $doctorBusyInCall) {
+                return [
+                    'success' => false,
+                    'session' => null,
+                    'message' => 'Doctor is currently in another session'
                 ];
             }
 

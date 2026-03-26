@@ -116,7 +116,47 @@ class DoctorWalletController extends Controller
     public function requestWithdrawal(Request $request): JsonResponse
     {
         $user = Auth::user();
-        
+
+        // 📝 Audit Log: Capture raw request
+        Log::info('💰 [DoctorWalletController] Withdrawal attempt started', [
+            'user_id' => $user->id,
+            'ip' => $request->ip(),
+            'payload' => $request->all(),
+            'user_agent' => $request->userAgent()
+        ]);
+
+        // 🛠 Backwards Compatibility: Alias 'method' to 'payment_method'
+        if ($request->has('method') && !$request->has('payment_method')) {
+            $request->merge(['payment_method' => $request->input('method')]);
+        }
+
+        // 🛠 Backwards Compatibility: Reconstruct payment_details if missing (old APKs)
+        if (!$request->has('payment_details')) {
+            $details = [];
+            $method = $request->input('payment_method');
+
+            if ($method === 'bank_transfer') {
+                $details = [
+                    'bank_name' => $request->input('bank_name'),
+                    'account_number' => $request->input('account_number'),
+                    'bank_branch' => $request->input('bank_branch') ?? $request->input('branch_name'),
+                ];
+            } elseif ($method === 'mobile_money') {
+                $details = [
+                    'mobile_provider' => $request->input('mobile_provider'),
+                    'mobile_number' => $request->input('mobile_number'),
+                ];
+            }
+
+            if (!empty($details)) {
+                $request->merge(['payment_details' => $details]);
+                Log::info('🛠 [DoctorWalletController] Reconstructed payment_details for old APK', [
+                    'user_id' => $user->id,
+                    'reconstructed_details' => $details
+                ]);
+            }
+        }
+
         $request->validate([
             'amount' => 'required|numeric|min:1000|max:1000000', // Min 1000, Max 1M
             'payment_method' => 'required|in:bank_transfer,mobile_money',
@@ -133,20 +173,18 @@ class DoctorWalletController extends Controller
         } else {
             // Mobile money only allowed for Malawian users
             $userCountry = strtolower($user->country ?? '');
-            Log::info('Mobile money withdrawal attempt', [
-                'user_id' => $user->id,
-                'user_country' => $user->country,
-                'user_country_lowercase' => $userCountry,
-                'is_malawi_user' => $userCountry === 'malawi'
-            ]);
-            
+
             if ($userCountry !== 'malawi') {
+                Log::warning('⚠️ [DoctorWalletController] Mobile money rejected - country mismatch', [
+                    'user_id' => $user->id,
+                    'country' => $userCountry
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Mobile money is only available for Malawian users'
                 ], 400);
             }
-            
+
             $request->validate([
                 'payment_details.mobile_provider' => 'required|in:airtel,tnm',
                 'payment_details.mobile_number' => 'required|string|max:20',
@@ -163,6 +201,11 @@ class DoctorWalletController extends Controller
         $wallet = DoctorWallet::getOrCreate($user->id);
 
         if ($wallet->balance < $request->amount) {
+            Log::warning('⚠️ [DoctorWalletController] Insufficient balance', [
+                'user_id' => $user->id,
+                'balance' => $wallet->balance,
+                'requested' => $request->amount
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Insufficient balance for withdrawal'
@@ -182,6 +225,13 @@ class DoctorWalletController extends Controller
         $availableForWithdrawal = $totalVerifiedPayments - $totalWithdrawn;
 
         if ($request->amount > $availableForWithdrawal) {
+            Log::warning('⚠️ [DoctorWalletController] Exceeds verified earnings', [
+                'user_id' => $user->id,
+                'verified' => $totalVerifiedPayments,
+                'withdrawn' => $totalWithdrawn,
+                'available' => $availableForWithdrawal,
+                'requested' => $request->amount
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Withdrawal amount exceeds verified earnings. Only funds from verified patient payments can be withdrawn.',
@@ -197,26 +247,53 @@ class DoctorWalletController extends Controller
         try {
             DB::beginTransaction();
 
+            // 🔒 Lock the wallet for update to prevent parallel request race conditions
+            $wallet = DoctorWallet::where('doctor_id', $user->id)->lockForUpdate()->first();
+
+            if ($wallet->balance < $request->amount) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Insufficient balance for withdrawal (locked check)'
+                ], 400);
+            }
+
+            // 💸 Immediate Debit: Lock the funds now
+            $transaction = $wallet->debit(
+                $request->amount,
+                "Withdrawal Request (Pending Admin Approval)",
+                [
+                    'payment_method' => $request->payment_method,
+                    'is_pending' => true
+                ]
+            );
+
             // Create withdrawal request
             $withdrawalData = [
                 'doctor_id' => $user->id,
                 'amount' => $request->amount,
                 'status' => WithdrawalRequest::STATUS_PENDING,
                 'payment_method' => $request->payment_method,
+                'bank_name' => $request->input('payment_details.bank_name'),
+                'account_number' => $request->input('payment_details.account_number'),
+                'bank_branch' => $request->input('payment_details.bank_branch'),
+                'account_holder_name' => $user->first_name . ' ' . $user->last_name,
+                'mobile_provider' => $request->input('payment_details.mobile_provider'),
+                'mobile_number' => $request->input('payment_details.mobile_number'),
             ];
 
-            // Add payment details based on method
-            if ($request->payment_method === 'bank_transfer') {
-                $withdrawalData['bank_name'] = $request->payment_details['bank_name'];
-                $withdrawalData['account_number'] = $request->payment_details['account_number'];
-                $withdrawalData['bank_branch'] = $request->payment_details['bank_branch'] ?? null;
-                $withdrawalData['account_holder_name'] = $user->first_name . ' ' . $user->last_name;
-            } else {
-                $withdrawalData['mobile_provider'] = $request->payment_details['mobile_provider'];
-                $withdrawalData['mobile_number'] = $request->payment_details['mobile_number'];
-            }
-
             $withdrawalRequest = WithdrawalRequest::create($withdrawalData);
+
+            // 🔗 Link transaction to request
+            $transaction->update([
+                'metadata' => array_merge($transaction->metadata ?? [], [
+                    'withdrawal_request_id' => $withdrawalRequest->id
+                ])
+            ]);
+
+            Log::info('✅ [DoctorWalletController] Withdrawal request verified and saved', [
+                'user_id' => $user->id,
+                'withdrawal_request_id' => $withdrawalRequest->id
+            ]);
 
             DB::commit();
 
@@ -232,6 +309,11 @@ class DoctorWalletController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('❌ [DoctorWalletController] Failed to save withdrawal', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to submit withdrawal request'
@@ -291,4 +373,4 @@ class DoctorWalletController extends Controller
             'data' => DoctorPaymentService::getPaymentAmountsForDoctor($user)
         ]);
     }
-} 
+}

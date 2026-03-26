@@ -99,13 +99,7 @@ class FcmChannel
         $data = $message['data'] ?? [];
         $type = $data['type'] ?? '';
         $isIncomingCall = ($type === 'incoming_call' || ($data['isIncomingCall'] ?? '') === 'true');
-        $channelId = 'calls'; // default
-
-        if (str_contains($type, 'chat_message') || str_contains($type, 'new_message')) {
-            $channelId = 'messages';
-        } elseif (str_contains($type, 'appointment')) {
-            $channelId = 'appointments';
-        }
+        $channelId = $isIncomingCall ? 'incoming_calls_v3' : 'urgent_medical';
 
         Log::info("📤 FCM V1 Channel: Preparing FCM payload", [
             'user_id' => $notifiable->id,
@@ -120,9 +114,19 @@ class FcmChannel
         $payload = [
             'message' => [
                 'token' => $notifiable->push_token,
-                'data' => $data,
+                'data' => array_map('strval', $data), // Ensure all data values are strings for FCM V1
                 'android' => [
                     'priority' => 'high', // High priority for immediate delivery
+                ],
+                'apns' => [
+                    'headers' => [
+                        'apns-priority' => '10', // High priority for APNs
+                    ],
+                    'payload' => [
+                        'aps' => [
+                            'content-available' => 1,
+                        ],
+                    ],
                 ],
             ]
         ];
@@ -130,21 +134,36 @@ class FcmChannel
         // Only add notification block for NON-CALL messages
         // Incoming calls use CallKeep native UI, not notifications
         if (!$isIncomingCall && isset($message['notification'])) {
+            // 🛠 FIX: Allow channel_id override from notification data
+            // If data contains 'channel_id', use it. Otherwise fall back to defaults.
+            $finalChannelId = $data['channel_id'] ?? $channelId;
+
+            // Optional: If user specifically wants to move AWAY from "urgent_medical" 
+            // but didn't specify a new one, we can use "default" or "messages"
+            if ($finalChannelId === 'urgent_medical') {
+                $finalChannelId = $data['android_channel_id'] ?? 'urgent_medical'; // Fallback to another legacy field if needed
+            }
+
             $payload['message']['notification'] = [
                 'title' => $message['notification']['title'] ?? '',
                 'body' => $message['notification']['body'] ?? '',
             ];
             $payload['message']['android']['notification'] = [
                 'sound' => 'default',
-                'channel_id' => $channelId,
-                'notification_priority' => $channelId === 'calls' ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
+                'notification_priority' => 'PRIORITY_MAX',
                 'visibility' => 'PUBLIC'
             ];
+
+            // Only add channel_id if it's NOT the legacy "urgent_medical" (which user wants to avoid)
+            // or if it's specifically overridden in data.
+            if ($finalChannelId && $finalChannelId !== 'urgent_medical') {
+                $payload['message']['android']['notification']['channel_id'] = $finalChannelId;
+            }
         }
 
-        // Add iOS config from notification if present
+        // Add/Merge iOS config from notification if present
         if (isset($message['apns'])) {
-            $payload['message']['apns'] = $message['apns'];
+            $payload['message']['apns'] = array_replace_recursive($payload['message']['apns'], $message['apns']);
         }
 
         try {
@@ -176,11 +195,32 @@ class FcmChannel
                 ]);
                 return $result;
             } else {
+                $status = $response->status();
+                $body = $response->json();
+                $errorCode = $body['error']['status'] ?? 'UNKNOWN';
+                $details = $body['error']['details'] ?? [];
+
                 Log::error("❌ FCM V1 Channel: Failed to send notification", [
                     'user_id' => $notifiable->id,
-                    'status' => $response->status(),
-                    'body' => $response->body()
+                    'status' => $status,
+                    'error_code' => $errorCode,
+                    'body' => $body
                 ]);
+
+                // Handle stale tokens (UNREGISTERED or INVALID_ARGUMENT with specific message)
+                if ($errorCode === 'UNREGISTERED' || ($errorCode === 'INVALID_ARGUMENT' && str_contains(json_encode($body), 'is not a valid FCM registration token'))) {
+                    Log::warning("⚠️ FCM V1 Channel: Token is invalid or unregistered. Inactivating token for user.", [
+                        'user_id' => $notifiable->id,
+                        'token_preview' => substr($notifiable->push_token, 0, 10) . '...'
+                    ]);
+
+                    // Atomic update to clear the token and disable push notifications
+                    \App\Models\User::where('id', $notifiable->id)->update([
+                        'push_token' => null,
+                        'push_notifications_enabled' => false
+                    ]);
+                }
+
                 return false;
             }
         } catch (\Exception $e) {

@@ -368,32 +368,21 @@ class DoctorPaymentService
     {
         try {
             $patient = $session->patient;
-            if (!$patient || !$patient->subscription) {
-                \Log::warning('Patient has no subscription for text session deduction', [
+            if (!$patient) {
+                \Log::warning('Patient not found for text session deduction', [
                     'session_id' => $session->id,
                     'patient_id' => $session->patient_id,
                 ]);
                 return false;
             }
 
-            $subscription = $patient->subscription;
+            // FIFO: get oldest active subscription with text sessions remaining
+            $subscription = Subscription::getOldestActiveForDeduction($patient->id, 'text');
 
-            // Check if subscription is active
-            if (!$subscription->isActive) {
-                \Log::warning('Patient subscription is not active for text session deduction', [
+            if (!$subscription) {
+                \Log::warning('Patient has no active subscription with text sessions remaining', [
                     'session_id' => $session->id,
                     'patient_id' => $session->patient_id,
-                    'subscription_status' => $subscription->status,
-                ]);
-                return false;
-            }
-
-            // Check if text sessions are available
-            if ($subscription->text_sessions_remaining <= 0) {
-                \Log::warning('Patient has no text sessions remaining for deduction', [
-                    'session_id' => $session->id,
-                    'patient_id' => $session->patient_id,
-                    'text_sessions_remaining' => $subscription->text_sessions_remaining,
                 ]);
                 return false;
             }
@@ -401,9 +390,10 @@ class DoctorPaymentService
             // Deduct one text session
             $subscription->decrement('text_sessions_remaining');
 
-            \Log::info('Successfully deducted text session from patient subscription', [
+            \Log::info('Successfully deducted text session from patient subscription (FIFO)', [
                 'session_id' => $session->id,
                 'patient_id' => $session->patient_id,
+                'subscription_id' => $subscription->id,
                 'text_sessions_remaining_after' => $subscription->text_sessions_remaining,
             ]);
 
@@ -448,57 +438,51 @@ class DoctorPaymentService
             }
 
             $patient = $appointment->patient;
-            if (!$patient || !$patient->subscription) {
-                \Log::warning('Patient has no subscription for appointment deduction', [
+            if (!$patient) {
+                \Log::warning('Patient not found for appointment deduction', [
                     'appointment_id' => $appointment->id,
                     'patient_id' => $appointment->patient_id,
-                ]);
-                return false;
-            }
-
-            $subscription = $patient->subscription;
-
-            // Check if subscription is active
-            if (!$subscription->isActive) {
-                \Log::warning('Patient subscription is not active for appointment deduction', [
-                    'appointment_id' => $appointment->id,
-                    'patient_id' => $appointment->patient_id,
-                    'subscription_status' => $subscription->status,
                 ]);
                 return false;
             }
 
             // Determine which session type to deduct based on appointment type
             $appointmentType = $appointment->appointment_type ?? 'text';
+            $sessionType = match ($appointmentType) {
+                'audio' => 'voice',
+                'video' => 'video',
+                default => 'text',
+            };
+
+            // FIFO: get oldest active subscription with remaining sessions of this type
+            $subscription = Subscription::getOldestActiveForDeduction($patient->id, $sessionType);
+
+            if (!$subscription) {
+                \Log::warning('Patient has no active subscription with remaining sessions for appointment deduction', [
+                    'appointment_id' => $appointment->id,
+                    'patient_id' => $appointment->patient_id,
+                    'session_type' => $sessionType,
+                ]);
+                return false;
+            }
+
             $sessionsRemaining = 0;
 
             // Use transaction for atomic update
             \DB::transaction(function () use ($subscription, $appointment, $appointmentType, &$sessionsRemaining) {
                 switch ($appointmentType) {
                     case 'text':
-                        if ($subscription->text_sessions_remaining <= 0) {
-                            throw new \Exception('Insufficient text sessions');
-                        }
                         $subscription->decrement('text_sessions_remaining');
                         $sessionsRemaining = $subscription->text_sessions_remaining;
                         break;
-
                     case 'audio':
-                        if ($subscription->voice_calls_remaining <= 0) {
-                            throw new \Exception('Insufficient voice calls');
-                        }
                         $subscription->decrement('voice_calls_remaining');
                         $sessionsRemaining = $subscription->voice_calls_remaining;
                         break;
-
                     case 'video':
-                        if ($subscription->video_calls_remaining <= 0) {
-                            throw new \Exception('Insufficient video calls');
-                        }
                         $subscription->decrement('video_calls_remaining');
                         $sessionsRemaining = $subscription->video_calls_remaining;
                         break;
-
                     default:
                         throw new \Exception('Unknown appointment type');
                 }
@@ -507,9 +491,10 @@ class DoctorPaymentService
                 $appointment->update(['sessions_deducted' => 1]);
             });
 
-            \Log::info('Successfully deducted session from patient subscription for appointment', [
+            \Log::info('Successfully deducted session from patient subscription for appointment (FIFO)', [
                 'appointment_id' => $appointment->id,
                 'patient_id' => $appointment->patient_id,
+                'subscription_id' => $subscription->id,
                 'appointment_type' => $appointmentType,
                 'sessions_remaining_after' => $sessionsRemaining,
             ]);
@@ -532,35 +517,10 @@ class DoctorPaymentService
     {
         try {
             $patient = $session->patient;
-            if (!$patient || !$patient->subscription) {
-                \Log::warning('Patient has no subscription for multiple text session deduction', [
+            if (!$patient) {
+                \Log::warning('Patient not found for multiple text session deduction', [
                     'session_id' => $session->id,
-                    'patient_id' => $patient->id,
-                    'sessions_to_deduct' => $sessionsToDeduct,
-                ]);
-                return false;
-            }
-
-            $subscription = $patient->subscription;
-
-            // Check if subscription is active
-            if (!$subscription->isActive) {
-                \Log::warning('Patient subscription is not active for multiple text session deduction', [
-                    'session_id' => $session->id,
-                    'patient_id' => $patient->id,
-                    'subscription_status' => $subscription->status,
-                    'sessions_to_deduct' => $sessionsToDeduct,
-                ]);
-                return false;
-            }
-
-            // SAFETY CHECK: Prevent negative sessions
-            if ($subscription->text_sessions_remaining < $sessionsToDeduct) {
-                \Log::warning('Insufficient sessions remaining for deduction', [
-                    'session_id' => $session->id,
-                    'patient_id' => $patient->id,
-                    'sessions_remaining' => $subscription->text_sessions_remaining,
-                    'sessions_to_deduct' => $sessionsToDeduct,
+                    'patient_id' => $session->patient_id,
                 ]);
                 return false;
             }
@@ -572,16 +532,38 @@ class DoctorPaymentService
                     'patient_id' => $patient->id,
                     'sessions_to_deduct' => $sessionsToDeduct,
                 ]);
-                return true; // Not an error, just no deduction needed
+                return true;
             }
 
-            // Deduct the specified number of sessions
-            $subscription->decrement('text_sessions_remaining', $sessionsToDeduct);
+            // FIFO: Deduct across stacked subscriptions, oldest first
+            $remaining = $sessionsToDeduct;
+            while ($remaining > 0) {
+                $subscription = Subscription::getOldestActiveForDeduction($patient->id, 'text');
+                if (!$subscription) {
+                    \Log::warning('Insufficient sessions across all subscriptions for deduction', [
+                        'session_id' => $session->id,
+                        'patient_id' => $patient->id,
+                        'still_needed' => $remaining,
+                    ]);
+                    return false;
+                }
 
-            \Log::info('Successfully deducted multiple text sessions from patient subscription', [
+                $canDeduct = min($remaining, $subscription->text_sessions_remaining);
+                $subscription->decrement('text_sessions_remaining', $canDeduct);
+                $remaining -= $canDeduct;
+
+                \Log::info('Deducted text sessions from subscription (FIFO)', [
+                    'session_id' => $session->id,
+                    'subscription_id' => $subscription->id,
+                    'deducted' => $canDeduct,
+                    'sub_remaining' => $subscription->text_sessions_remaining,
+                    'still_to_deduct' => $remaining,
+                ]);
+            }
+
+            \Log::info('Successfully deducted multiple text sessions across subscriptions (FIFO)', [
                 'session_id' => $session->id,
                 'patient_id' => $patient->id,
-                'text_sessions_remaining_after' => $subscription->text_sessions_remaining,
                 'sessions_deducted' => $sessionsToDeduct,
             ]);
 
@@ -630,23 +612,27 @@ class DoctorPaymentService
                     }
 
                     $patient = $freshSession->patient;
-                    if ($patient && $patient->subscription) {
-                        // Lock subscription for update to prevent race conditions
-                        $subscription = $patient->subscription()->lockForUpdate()->first();
+                    if ($patient) {
+                        // FIFO: get oldest active subscription with text sessions remaining
+                        $subscription = Subscription::getOldestActiveForDeduction($patient->id, 'text');
 
                         if (!$subscription) {
-                            \Log::warning('Subscription not found during auto-deduction', [
+                            \Log::warning('No subscription with text sessions remaining for auto-deduction', [
                                 'session_id' => $freshSession->id,
                                 'patient_id' => $patient->id,
                             ]);
                             return false;
                         }
 
+                        // Lock for update to prevent race conditions
+                        $subscription = Subscription::where('id', $subscription->id)->lockForUpdate()->first();
+
                         // SAFETY CHECK: Prevent negative sessions with locked record
                         if ($subscription->text_sessions_remaining < $freshNewDeductions) {
                             \Log::warning('Insufficient sessions remaining for auto-deduction', [
                                 'session_id' => $freshSession->id,
                                 'patient_id' => $patient->id,
+                                'subscription_id' => $subscription->id,
                                 'sessions_remaining' => $subscription->text_sessions_remaining,
                                 'new_deductions' => $freshNewDeductions,
                                 'elapsed_minutes' => $elapsedMinutes,
@@ -663,14 +649,32 @@ class DoctorPaymentService
                         if ($doctor) {
                             $wallet = DoctorWallet::getOrCreate($doctor->id);
                             $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $freshNewDeductions;
-                            $wallet->credit($paymentAmount, "Auto-deduction for session {$freshSession->id} ({$freshNewDeductions} sessions)");
+
+                            // Get payment transaction ID from patient's subscription for verification
+                            $paymentTransactionId = $subscription->payment_transaction_id;
+                            $paymentGateway = $subscription->payment_gateway;
+
+                            $wallet->credit(
+                                $paymentAmount,
+                                "Auto-deduction for session {$freshSession->id} ({$freshNewDeductions} sessions)",
+                                'text',
+                                $freshSession->id,
+                                'text_sessions',
+                                [
+                                    'patient_name' => $patient->first_name . " " . $patient->last_name,
+                                    'sessions_deducted' => $freshNewDeductions,
+                                    'payment_transaction_id' => $paymentTransactionId,
+                                    'payment_gateway' => $paymentGateway,
+                                    'elapsed_minutes' => $elapsedMinutes,
+                                ]
+                            );
 
                             // Send notification to doctor about payment
                             $notificationService = new NotificationService();
                             $notificationService->sendWalletNotification(
                                 $wallet->transactions()->latest()->first(),
                                 'payment_received',
-                                "You received {$paymentAmount} for {$freshNewDeductions} session(s) from auto-deduction"
+                                "You received MWK {$paymentAmount} for {$freshNewDeductions} session(s) from auto-deduction"
                             );
                         }
 
@@ -757,21 +761,15 @@ class DoctorPaymentService
                 return false;
             }
 
-            if (!$patient->subscription) {
-                \Log::error('No subscription found for manual end deduction', [
-                    'session_id' => $session->id,
-                    'patient_id' => $session->patient_id,
-                ]);
-                return false;
-            }
+            // FIFO: get oldest active subscription with text sessions remaining
+            $subscription = Subscription::getOldestActiveForDeduction($patient->id, 'text');
 
-            $subscription = $patient->subscription;
-            if (!$subscription->isActive) {
-                \Log::warning('Inactive subscription for manual end deduction - allowing end anyway', [
+            if (!$subscription) {
+                \Log::warning('No subscription with text sessions remaining for manual end deduction', [
                     'session_id' => $session->id,
                     'patient_id' => $session->patient_id,
                 ]);
-                // Continue with deduction even if subscription is inactive
+                // Continue — allow ending even without a subscription
             }
 
             // Calculate sessions to deduct (accounts for auto-deductions already processed)
@@ -787,16 +785,17 @@ class DoctorPaymentService
                 return true; // Already deducted, nothing to do
             }
 
-            // More flexible safety check - allow ending even with 0 sessions
-            if ($subscription->text_sessions_remaining < $sessionsToDeduct) {
+            // More flexible safety check - deduct what we can across stacked subscriptions
+            if (!$subscription || $subscription->text_sessions_remaining < $sessionsToDeduct) {
+                $available = $subscription ? $subscription->text_sessions_remaining : 0;
                 \Log::warning('Insufficient sessions remaining - deducting what we can', [
                     'session_id' => $session->id,
                     'patient_id' => $session->patient_id,
-                    'sessions_remaining' => $subscription->text_sessions_remaining,
+                    'sessions_remaining' => $available,
                     'sessions_to_deduct' => $sessionsToDeduct,
                 ]);
                 // Deduct what we can
-                $sessionsToDeduct = max(0, $subscription->text_sessions_remaining);
+                $sessionsToDeduct = max(0, $available);
             }
 
             // Deduct sessions (only what hasn't been auto-deducted)

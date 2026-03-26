@@ -27,6 +27,11 @@ class PaymentController extends Controller
                 ?? $request->header('Paychangu-Signature')
                 ?? $request->header('paychangu-signature');
             $webhookSecret = config('services.paychangu.webhook_secret');
+            // Do not use webhook secret if it was mistakenly set to the webhook URL (e.g. https://...)
+            if ($webhookSecret && (str_starts_with($webhookSecret, 'http://') || str_starts_with($webhookSecret, 'https://'))) {
+                Log::warning('PAYCHANGU_WEBHOOK_SECRET appears to be a URL; use the actual secret key from PayChangu dashboard (e.g. whsec_...)');
+                $webhookSecret = null;
+            }
             $apiSecret = config('services.paychangu.secret_key');
 
             Log::info('Webhook verification details', [
@@ -156,12 +161,32 @@ class PaymentController extends Controller
             $currency = $data['currency'];
 
             // Use correct Paychangu transaction ID fields
-            $transactionId = $data['charge_id'] ?? $data['reference'] ?? null;
+            $transactionId = $data['tx_ref'] ?? $data['charge_id'] ?? $data['reference'] ?? null;
 
             if (!$transactionId) {
                 Log::error('Missing transaction ID in Paychangu webhook', ['data' => $data]);
                 throw new \Exception('Missing transaction ID');
             }
+
+            // ── FIX 5: Webhook deduplication ────────────────────────────────────────────
+            // If this tx_ref was already processed + marked completed, return 200 early.
+            // This prevents duplicate subscription grants when PayChangu retries the webhook.
+            $existingTransaction = \App\Models\PaymentTransaction::where('transaction_id', $transactionId)
+                ->where('status', 'completed')
+                ->first();
+
+            if ($existingTransaction) {
+                Log::info('Duplicate webhook received — tx_ref already processed, skipping.', [
+                    'transaction_id' => $transactionId,
+                    'original_processed_at' => $existingTransaction->updated_at,
+                    'user_id' => $userId,
+                ]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Already processed (idempotent)',
+                ], 200);
+            }
+            // ────────────────────────────────────────────────────────────────────────────
 
             // Find plan either by ID or by amount/currency
             $plan = null;
@@ -523,6 +548,12 @@ class PaymentController extends Controller
     private function renderRedirectPage($transaction, $txRef, $status)
     {
         $final_status = $transaction ? $transaction->status : $status;
+        // Frontend URL for browser redirect after payment (must be a valid absolute URL)
+        $frontendUrl = rtrim((string) config('app.frontend_url', 'https://docavailable.com'), '/');
+        if (!preg_match('#^https?://#i', $frontendUrl)) {
+            $frontendUrl = 'https://docavailable.com';
+        }
+        $redirectUrl = $frontendUrl . '/?payment_status=' . urlencode($final_status) . '&tx_ref=' . urlencode($txRef);
 
         // Return a invisible, instant redirect page
         $html = '<!DOCTYPE html>
@@ -546,11 +577,13 @@ class PaymentController extends Controller
                     status: "' . $final_status . '",
                     tx_ref: "' . $txRef . '"
                 }));
+            } else {
+                // 2. Browser/tab fallback: redirect back to main app URL
+                // This handles flows where checkout was opened in a new tab or external browser.
+                setTimeout(function() {
+                    window.location.href = ' . json_encode($redirectUrl) . ';
+                }, 1500);
             }
-            
-            // Note: We no longer auto-redirect to window.location.href = deepLink 
-            // because it causes "Page not found" flicker in WebViews.
-            // The postMessage above handles closure for the mobile app.
         }
 
         // Execute closure signal immediately
@@ -742,165 +775,65 @@ class PaymentController extends Controller
             $plan = Plan::findOrFail($planId);
             $user = User::findOrFail($userId);
 
-            Log::info('Activating plan for user', [
+            Log::info('Activating plan for user (stacking – always creates new subscription)', [
                 'user_id' => $userId,
                 'plan_id' => $planId,
                 'transaction_id' => $transactionId
             ]);
 
-            // Check for existing active subscription
-            $existingSubscription = Subscription::where('user_id', $userId)
-                ->where('is_active', true)
-                ->first();
+            // Always create a new subscription row (stacking model).
+            // Old active subscriptions keep their sessions and expire independently.
+            $subscriptionData = [
+                'user_id' => $userId,
+                'plan_id' => $planId,
+                'plan_name' => $plan->name,
+                'plan_price' => $plan->price,
+                'plan_currency' => $plan->currency,
+                'status' => 1,
+                'start_date' => now(),
+                'end_date' => now()->addDays($plan->duration),
+                'is_active' => true,
+                'payment_transaction_id' => $transactionId,
+                'payment_status' => 'completed',
+                'text_sessions_remaining' => $plan->text_sessions,
+                'voice_calls_remaining' => $plan->voice_calls,
+                'video_calls_remaining' => $plan->video_calls,
+                'total_text_sessions' => $plan->text_sessions,
+                'total_voice_calls' => $plan->voice_calls,
+                'total_video_calls' => $plan->video_calls,
+                'activated_at' => now()
+            ];
 
-            if ($existingSubscription) {
-                // Update existing subscription with new sessions
-                $subscriptionData = [
-                    'plan_id' => $planId,
-                    'plan_name' => $plan->name,
-                    'plan_price' => $plan->price,
-                    'plan_currency' => $plan->currency,
-                    'text_sessions_remaining' => $existingSubscription->text_sessions_remaining + $plan->text_sessions,
-                    'voice_calls_remaining' => $existingSubscription->voice_calls_remaining + $plan->voice_calls,
-                    'video_calls_remaining' => $existingSubscription->video_calls_remaining + $plan->video_calls,
-                    'total_text_sessions' => $existingSubscription->total_text_sessions + $plan->text_sessions,
-                    'total_voice_calls' => $existingSubscription->total_voice_calls + $plan->voice_calls,
-                    'total_video_calls' => $existingSubscription->total_video_calls + $plan->video_calls,
-                    'end_date' => now()->addDays($plan->duration),
-                    'payment_transaction_id' => $transactionId,
-                    'payment_status' => 'completed',
-                    'is_active' => true,
-                    'activated_at' => now()
-                ];
+            $subscription = Subscription::create($subscriptionData);
 
-                $existingSubscription->update($subscriptionData);
+            Log::info('Created new stacked subscription', [
+                'subscription_id' => $subscription->id,
+                'user_id' => $userId,
+                'plan_id' => $planId
+            ]);
 
-                Log::info('Updated existing subscription', [
-                    'subscription_id' => $existingSubscription->id,
-                    'user_id' => $userId,
-                    'plan_id' => $planId
-                ]);
-
-                // Send subscription activated notification
-                try {
-                    $notificationService = new \App\Services\NotificationService();
-                    $notificationService->createNotification(
-                        $userId,
-                        'Subscription Activated',
-                        'Your subscription plan has been activated successfully.',
-                        'subscription',
-                        [
-                            'subscription_id' => $existingSubscription->id,
-                            'plan_name' => $plan->name,
-                        ]
-                    );
-                } catch (\Exception $notificationError) {
-                    // Log but don't fail the subscription activation if notification fails
-                    Log::warning("Failed to send subscription activated notification", [
-                        'subscription_id' => $existingSubscription->id,
-                        'user_id' => $userId,
-                        'error' => $notificationError->getMessage()
-                    ]);
-                }
-
-                return $existingSubscription;
-            } else {
-                // Create new subscription - Handle potential constraint issues
-                $subscriptionData = [
-                    'user_id' => $userId,
-                    'plan_id' => $planId,
-                    'plan_name' => $plan->name,
-                    'plan_price' => $plan->price,
-                    'plan_currency' => $plan->currency,
-                    'status' => 1, // Use integer 1 for active status
-                    'start_date' => now(),
-                    'end_date' => now()->addDays($plan->duration),
-                    'is_active' => true,
-                    'payment_transaction_id' => $transactionId,
-                    'payment_status' => 'completed',
-                    'text_sessions_remaining' => $plan->text_sessions,
-                    'voice_calls_remaining' => $plan->voice_calls,
-                    'video_calls_remaining' => $plan->video_calls,
-                    'total_text_sessions' => $plan->text_sessions,
-                    'total_voice_calls' => $plan->voice_calls,
-                    'total_video_calls' => $plan->video_calls,
-                    'activated_at' => now()
-                ];
-
-                // First, deactivate any existing inactive subscriptions for this user
-                Subscription::where('user_id', $userId)
-                    ->where('is_active', false)
-                    ->update(['is_active' => false]);
-
-                // Try to create the subscription
-                try {
-                    $subscription = Subscription::create($subscriptionData);
-
-                    Log::info('Created new subscription', [
+            // Send subscription activated notification
+            try {
+                $notificationService = new \App\Services\NotificationService();
+                $notificationService->createNotification(
+                    $userId,
+                    'Subscription Activated',
+                    'Your subscription plan has been activated successfully.',
+                    'subscription',
+                    [
                         'subscription_id' => $subscription->id,
-                        'user_id' => $userId,
-                        'plan_id' => $planId
-                    ]);
-
-                    // Send subscription activated notification
-                    try {
-                        $notificationService = new \App\Services\NotificationService();
-                        $notificationService->createNotification(
-                            $userId,
-                            'Subscription Activated',
-                            'Your subscription plan has been activated successfully.',
-                            'subscription',
-                            [
-                                'subscription_id' => $subscription->id,
-                                'plan_name' => $plan->name,
-                            ]
-                        );
-                    } catch (\Exception $notificationError) {
-                        // Log but don't fail the subscription activation if notification fails
-                        Log::warning("Failed to send subscription activated notification", [
-                            'subscription_id' => $subscription->id,
-                            'user_id' => $userId,
-                            'error' => $notificationError->getMessage()
-                        ]);
-                    }
-
-                    return $subscription;
-                } catch (\Illuminate\Database\QueryException $e) {
-                    // Handle potential unique constraint violations
-                    if (
-                        strpos($e->getMessage(), 'duplicate key') !== false ||
-                        strpos($e->getMessage(), 'unique constraint') !== false ||
-                        strpos($e->getMessage(), 'UNIQUE constraint') !== false
-                    ) {
-
-                        Log::warning('Unique constraint violation, attempting to find existing subscription', [
-                            'user_id' => $userId,
-                            'plan_id' => $planId,
-                            'error' => $e->getMessage()
-                        ]);
-
-                        // Try to find and update existing subscription
-                        $existingSubscription = Subscription::where('user_id', $userId)
-                            ->where('plan_id', $planId)
-                            ->first();
-
-                        if ($existingSubscription) {
-                            $existingSubscription->update($subscriptionData);
-
-                            Log::info('Updated existing subscription after constraint violation', [
-                                'subscription_id' => $existingSubscription->id,
-                                'user_id' => $userId,
-                                'plan_id' => $planId
-                            ]);
-
-                            return $existingSubscription;
-                        }
-                    }
-
-                    // Re-throw if it's not a constraint issue
-                    throw $e;
-                }
+                        'plan_name' => $plan->name,
+                    ]
+                );
+            } catch (\Exception $notificationError) {
+                Log::warning("Failed to send subscription activated notification", [
+                    'subscription_id' => $subscription->id,
+                    'user_id' => $userId,
+                    'error' => $notificationError->getMessage()
+                ]);
             }
+
+            return $subscription;
         } catch (\Exception $e) {
             Log::error('Failed to activate plan for user: ' . $e->getMessage(), [
                 'user_id' => $userId,

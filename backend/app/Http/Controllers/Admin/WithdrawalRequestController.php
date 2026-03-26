@@ -137,6 +137,17 @@ class WithdrawalRequestController extends Controller
                 'rejection_reason' => $request->rejection_reason,
             ]);
 
+            // 💰 Refund the doctor since funds were deducted at the time of request
+            $wallet = DoctorWallet::getOrCreate($withdrawalRequest->doctor_id);
+            $wallet->credit(
+                (float) $withdrawalRequest->amount,
+                "Withdrawal Request Rejected: #{$withdrawalRequest->id}",
+                'withdrawal_refund',
+                $withdrawalRequest->id,
+                'withdrawal_requests',
+                ['rejection_reason' => $request->rejection_reason]
+            );
+
             DB::commit();
 
             return response()->json([
@@ -182,25 +193,14 @@ class WithdrawalRequestController extends Controller
             // Get doctor's wallet
             $wallet = DoctorWallet::getOrCreate($withdrawalRequest->doctor_id);
 
-            // Check if doctor has sufficient balance
-            if ($wallet->balance < $withdrawalRequest->amount) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Insufficient balance in doctor\'s wallet'
-                ], 400);
-            }
+            // Funds were already deducted at the time of request (DoctorWalletController@requestWithdrawal)
+            // We just update the status here.
 
-            // Create withdrawal transaction
-            $transaction = $wallet->debit(
-                $withdrawalRequest->amount,
-                "Withdrawal payment to {$withdrawalRequest->bank_name} - {$withdrawalRequest->account_holder_name}",
-                [
-                    'withdrawal_request_id' => $withdrawalRequest->id,
-                    'bank_account' => $withdrawalRequest->bank_account,
-                    'bank_name' => $withdrawalRequest->bank_name,
-                    'account_holder_name' => $withdrawalRequest->account_holder_name,
-                ]
-            );
+            // 🔗 Retrieve original debit transaction for response
+            $transaction = WalletTransaction::where('doctor_id', $withdrawalRequest->doctor_id)
+                ->where('type', 'debit')
+                ->where('metadata->withdrawal_request_id', $withdrawalRequest->id)
+                ->first();
 
             // Update withdrawal request
             $withdrawalRequest->update([
@@ -296,7 +296,7 @@ class WithdrawalRequestController extends Controller
                 'amount' => $request->amount,
                 'error' => $e->getMessage()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to send email notification'

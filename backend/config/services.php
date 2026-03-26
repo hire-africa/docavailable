@@ -56,7 +56,7 @@ return [
         'service_account_json' => env('FIREBASE_SERVICE_ACCOUNT_JSON'),
         'credentials_path' => env('GOOGLE_APPLICATION_CREDENTIALS', storage_path('app/firebase-service-account.json')),
     ],
-    
+
     'onesignal' => [
         'app_id' => env('ONESIGNAL_APP_ID'),
         'rest_api_key' => env('ONESIGNAL_REST_API_KEY'),
@@ -65,6 +65,11 @@ return [
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+    ],
+
+    // FIX 2: WebRTC call server shared secret for server-initiated session end
+    'call_server' => [
+        'secret' => env('CALL_SERVER_SECRET', ''),
     ],
 
 ];

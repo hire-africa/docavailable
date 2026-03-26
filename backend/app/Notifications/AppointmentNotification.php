@@ -3,12 +3,11 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use App\Models\Appointment;
 
-class AppointmentNotification extends Notification implements ShouldQueue
+class AppointmentNotification extends Notification
 {
     use Queueable;
 
@@ -19,7 +18,7 @@ class AppointmentNotification extends Notification implements ShouldQueue
     /**
      * Create a new notification instance.
      */
-    public function __construct(Appointment $appointment, string $type, string $message = null)
+    public function __construct(Appointment $appointment, string $type, ?string $message = null)
     {
         $this->appointment = $appointment;
         $this->type = $type;
@@ -32,11 +31,11 @@ class AppointmentNotification extends Notification implements ShouldQueue
     public function via($notifiable): array
     {
         $channels = ['database'];
-        
+
         if ($notifiable->email_notifications_enabled) {
             $channels[] = 'mail';
         }
-        
+
         if ($notifiable->push_notifications_enabled && $notifiable->push_token) {
             $channels[] = 'fcm';
         }
@@ -85,8 +84,9 @@ class AppointmentNotification extends Notification implements ShouldQueue
      */
     public function toArray($notifiable): array
     {
+        $canonicalType = 'appointment_' . $this->type;
         return [
-            'type' => 'appointment',
+            'type' => $canonicalType,
             'appointment_id' => $this->appointment->id,
             'notification_type' => $this->type,
             'title' => $this->getSubject(),
@@ -134,11 +134,11 @@ class AppointmentNotification extends Notification implements ShouldQueue
     protected function getGreeting($notifiable): string
     {
         $name = $notifiable->first_name;
-        
+
         if ($notifiable->isDoctor()) {
             return "Hello Dr. {$name},";
         }
-        
+
         return "Hello {$name},";
     }
 

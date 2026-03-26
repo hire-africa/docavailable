@@ -430,20 +430,19 @@ class TextAppointmentController extends Controller
                 }
             }
 
-            // Get patient's subscription
-            $subscription = Subscription::where('user_id', $appointment->patient_id)
-                ->where('is_active', true)
-                ->first();
+            // FIFO: get oldest active subscription with text sessions remaining
+            $subscription = Subscription::getOldestActiveForDeduction($appointment->patient_id, 'text');
 
             if (!$subscription) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No active subscription found for patient'
+                    'message' => 'No active subscription found with text sessions remaining'
                 ], 400);
             }
 
-            // Check if patient has enough sessions
-            if ($subscription->text_sessions_remaining < $sessionsToDeduct) {
+            // Check total remaining across all stacked subscriptions
+            $totalRemaining = Subscription::getTotalRemaining($appointment->patient_id, 'text');
+            if ($totalRemaining < $sessionsToDeduct) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Insufficient text sessions remaining'
@@ -451,14 +450,22 @@ class TextAppointmentController extends Controller
             }
 
             DB::transaction(function () use ($subscription, $sessionsToDeduct, $appointmentId, $appointment, $reason) {
-                // Deduct sessions from subscription
-                $subscription->decrement('text_sessions_remaining', $sessionsToDeduct);
+                // FIFO: deduct across stacked subscriptions, oldest first
+                $remaining = $sessionsToDeduct;
+                while ($remaining > 0) {
+                    $sub = Subscription::getOldestActiveForDeduction($appointment->patient_id, 'text');
+                    if (!$sub)
+                        break;
+                    $canDeduct = min($remaining, $sub->text_sessions_remaining);
+                    $sub->decrement('text_sessions_remaining', $canDeduct);
+                    $remaining -= $canDeduct;
+                }
 
                 // Update session with deduction
                 $session = DB::table('text_appointment_sessions')
                     ->where('appointment_id', $appointmentId)
                     ->where('is_active', true)
-                    ->lockForUpdate() // Lock row
+                    ->lockForUpdate()
                     ->first();
 
                 if ($session) {
@@ -505,17 +512,19 @@ class TextAppointmentController extends Controller
                             'doctor_id' => $doctor->id,
                             'appointment_id' => $appointmentId
                         ]);
-                        throw $e; // Re-throw to rollback transaction
+                        throw $e;
                     }
                 }
             });
+
+            $remainingAfter = Subscription::getTotalRemaining($appointment->patient_id, 'text');
 
             Log::info("Text appointment session deduction processed", [
                 'appointment_id' => $appointmentId,
                 'patient_id' => $appointment->patient_id,
                 'sessions_deducted' => $sessionsToDeduct,
                 'reason' => $reason,
-                'remaining_sessions' => $subscription->text_sessions_remaining,
+                'remaining_sessions' => $remainingAfter,
             ]);
 
             return response()->json([
@@ -523,7 +532,7 @@ class TextAppointmentController extends Controller
                 'message' => 'Session deduction processed successfully',
                 'data' => [
                     'sessions_deducted' => $sessionsToDeduct,
-                    'remaining_sessions' => $subscription->text_sessions_remaining,
+                    'remaining_sessions' => $remainingAfter,
                     'reason' => $reason,
                 ]
             ]);
@@ -598,12 +607,20 @@ class TextAppointmentController extends Controller
 
             // Process deduction if needed
             if ($sessionsToDeduct > 0) {
-                $subscription = Subscription::where('user_id', $appointment->patient_id)
-                    ->where('is_active', true)
-                    ->first();
+                // FIFO: get oldest active subscription with text sessions remaining
+                $subscription = Subscription::getOldestActiveForDeduction($appointment->patient_id, 'text');
 
-                if ($subscription && $subscription->text_sessions_remaining >= $sessionsToDeduct) {
-                    $subscription->decrement('text_sessions_remaining', $sessionsToDeduct);
+                if ($subscription && $subscription->text_sessions_remaining > 0) {
+                    // Deduct across stacked subscriptions (FIFO)
+                    $remaining = $sessionsToDeduct;
+                    while ($remaining > 0) {
+                        $sub = Subscription::getOldestActiveForDeduction($appointment->patient_id, 'text');
+                        if (!$sub)
+                            break;
+                        $canDeduct = min($remaining, $sub->text_sessions_remaining);
+                        $sub->decrement('text_sessions_remaining', $canDeduct);
+                        $remaining -= $canDeduct;
+                    }
 
                     // Credit Doctor Wallet for final deduction
                     $doctor = User::find($appointment->doctor_id);
@@ -695,15 +712,42 @@ class TextAppointmentController extends Controller
      */
     public function getSessionStatus(Request $request, $appointmentId): JsonResponse
     {
+        Log::info("[TextAppointmentController] getSessionStatus requested", [
+            'appointmentId' => $appointmentId,
+            'user_id' => auth()->id()
+        ]);
+
         try {
             $userId = auth()->id();
 
+            // Handle prefixed IDs for backwards compatibility
+            $actualId = $appointmentId;
+            if (is_string($appointmentId)) {
+                $actualId = str_replace(['text_session_', 'text_session:'], '', $appointmentId);
+            }
+
             // Get the appointment
-            $appointment = Appointment::find($appointmentId);
+            $appointment = Appointment::find($actualId);
             if (!$appointment) {
+                // If not found as appointment, try to find the text session directly
+                $textSession = TextSession::find($actualId);
+                if ($textSession) {
+                    return response()->json([
+                        'success' => true,
+                        'data' => [
+                            'session_id' => $textSession->id,
+                            'is_active' => $textSession->status === 'active',
+                            'is_ended' => in_array($textSession->status, ['ended', 'expired']),
+                            'start_time' => $textSession->activated_at,
+                            'last_activity_time' => $textSession->updated_at,
+                            'status' => $textSession->status
+                        ]
+                    ]);
+                }
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'Appointment not found'
+                    'message' => 'Appointment or session not found'
                 ], 404);
             }
 

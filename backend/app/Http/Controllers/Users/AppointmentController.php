@@ -5,6 +5,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Appointment;
+use App\Models\DoctorAvailability;
+use Carbon\Carbon;
 use App\Services\AppointmentService;
 use App\Services\NotificationService;
 use App\Services\AnonymizationService;
@@ -515,6 +517,9 @@ class AppointmentController extends Controller
                     $doctorData['is_online'] = $doctor->doctorAvailability->is_online;
                     $doctorData['working_hours'] = json_decode($doctor->doctorAvailability->working_hours, true);
                     $doctorData['max_patients_per_day'] = $doctor->doctorAvailability->max_patients_per_day;
+                    $doctorData['is_available_now'] = $this->computeIsAvailableNow($doctor->doctorAvailability);
+                } else {
+                    $doctorData['is_available_now'] = false;
                 }
 
                 return $doctorData;
@@ -524,6 +529,63 @@ class AppointmentController extends Controller
         });
 
         return $this->success($doctors, 'Available doctors fetched successfully');
+    }
+
+    private function isWithinWorkingHoursSlot(array $workingHours, Carbon $now, string $dayKey): bool
+    {
+        $day = $workingHours[$dayKey] ?? null;
+        if (!is_array($day) || empty($day['enabled']) || empty($day['slots']) || !is_array($day['slots'])) {
+            return false;
+        }
+
+        $nowMinutes = ((int) $now->format('H')) * 60 + ((int) $now->format('i'));
+
+        foreach ($day['slots'] as $slot) {
+            if (!is_array($slot)) continue;
+            $start = (string) ($slot['start'] ?? '');
+            $end = (string) ($slot['end'] ?? '');
+            if ($start === '' || $end === '') continue;
+
+            [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
+            [$eh, $em] = array_pad(explode(':', $end), 2, '0');
+            $startMinutes = ((int) $sh) * 60 + ((int) $sm);
+            $endMinutes = ((int) $eh) * 60 + ((int) $em);
+
+            if ($endMinutes <= $startMinutes) {
+                if ($nowMinutes >= $startMinutes || $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            } else {
+                if ($nowMinutes >= $startMinutes && $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function computeIsAvailableNow(?\App\Models\DoctorAvailability $availability): bool
+    {
+        if (!$availability) return false;
+
+        $now = Carbon::now('UTC');
+
+        if (!$availability->last_active_at) return false;
+        if (Carbon::parse($availability->last_active_at)->diffInMinutes($now) > 15) return false;
+
+        if ($availability->manually_offline) return false;
+        if ($availability->manually_online) return true;
+
+        $workingHours = $availability->working_hours;
+        if (!is_array($workingHours)) {
+            $decoded = json_decode((string) $availability->working_hours, true);
+            $workingHours = is_array($decoded) ? $decoded : null;
+        }
+        if (!is_array($workingHours)) return false;
+
+        $dayKey = strtolower($now->format('l'));
+        return $this->isWithinWorkingHoursSlot($workingHours, $now, $dayKey);
     }
 
     // Doctor: View their own appointments
@@ -751,6 +813,7 @@ class AppointmentController extends Controller
     public function startSession($id)
     {
         try {
+            $user = auth()->user();
             $appointment = \App\Models\Appointment::find($id);
 
             if (!$appointment) {
@@ -1158,6 +1221,13 @@ class AppointmentController extends Controller
     {
         try {
             $appointment = $this->appointmentService->updateStatus($request, $id);
+
+            // Clear dashboard caches to prevent 60s delay bug
+            if ($appointment) {
+                \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$appointment->doctor_id}");
+                \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$appointment->patient_id}");
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Appointment status updated successfully',
@@ -1180,6 +1250,13 @@ class AppointmentController extends Controller
     public function deleteExpiredAppointment(Request $request, $id)
     {
         try {
+            // Get appointment to clear patient cache before deletion
+            $appointment = \App\Models\Appointment::find($id);
+            if ($appointment) {
+                \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$appointment->patient_id}");
+            }
+            \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_" . auth()->id());
+
             $this->appointmentService->deleteExpiredAppointment($request, $id);
             return response()->json([
                 'success' => true,
@@ -1221,6 +1298,11 @@ class AppointmentController extends Controller
             'appointment_time' => $request->appointment_time,
             'status' => 'pending',
         ]);
+
+        // Clear dashboard caches
+        \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$patient->id}");
+        \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$request->doctor_id}");
+
         return response()->json(['message' => 'Appointment booked', 'appointment' => $appointment]);
     }
 
@@ -1229,6 +1311,11 @@ class AppointmentController extends Controller
     {
         $patient = $request->user();
         $appointment = $patient->appointments()->findOrFail($id);
+
+        // Clear caches
+        \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$patient->id}");
+        \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$appointment->doctor_id}");
+
         $appointment->delete();
         return response()->json(['message' => 'Appointment cancelled']);
     }

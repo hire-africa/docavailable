@@ -38,6 +38,14 @@ use Illuminate\Support\Facades\DB;
 
 // Debug routes removed for security
 
+// Health check - used by app for connectivity checks (no auth required)
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'ok',
+        'message' => 'API is running',
+        'timestamp' => now()->toIso8601String(),
+    ]);
+});
 
 // Authentication routes (rate limited)
 Route::prefix('auth')->middleware('throttle:5,1')->group(function () {
@@ -168,6 +176,7 @@ Route::middleware(['auth:api'])->group(function () {
 
     // Notification routes
     Route::get('/notifications', [NotificationController::class, 'getNotifications']);
+    Route::get('/notifications/unread', [NotificationController::class, 'getUnreadNotifications']);
     Route::post('/notifications/mark-read', [NotificationController::class, 'markAsRead']);
     Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
     Route::post('/notifications/send-chat-message', [NotificationController::class, 'sendChatMessageNotification']);
@@ -242,15 +251,18 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/text-sessions/schedule', [TextSessionController::class, 'createScheduled']);
     Route::get('/text-sessions/scheduled', [TextSessionController::class, 'getScheduledSessions']);
 
-    Route::post('/text-sessions/start', [TextSessionController::class, 'start']);
+    Route::post('/text-sessions/start', [TextSessionController::class, 'start'])->middleware('throttle:3,1');
     Route::post('/text-sessions/create-from-appointment', [TextSessionController::class, 'createFromAppointment']);
     Route::get('/text-sessions/pending-sessions', [TextSessionController::class, 'pendingSessions']);
     Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'activeSessions']);
     Route::get('/text-sessions/available-doctors', [TextSessionController::class, 'availableDoctors']);
-    Route::post('/text-sessions/{textSessionId}/start-call', [TextSessionController::class, 'startCall'])->where('textSessionId', '[0-9]+');
-    Route::get('/text-sessions/{manualSessionId}/check-response', [TextSessionController::class, 'checkResponse'])->where('manualSessionId', '[0-9]+');
-    Route::post('/text-sessions/{manualSessionId}/end', [TextSessionController::class, 'endSession'])->where('manualSessionId', '[0-9]+');
-    Route::get('/text-sessions/{manualSessionId}', [TextSessionController::class, 'getSession'])->where('manualSessionId', '[0-9]+');
+    Route::get('/text-sessions/history', [TextSessionController::class, 'history']);
+    Route::post('/text-sessions/{textSessionId}/start-call', [TextSessionController::class, 'startCall']);
+    Route::get('/text-sessions/{manualSessionId}/check-response', [TextSessionController::class, 'checkResponse']);
+    Route::post('/text-sessions/{manualSessionId}/end', [TextSessionController::class, 'endSession']);
+    Route::get('/text-sessions/{manualSessionId}', [TextSessionController::class, 'getSession']);
+    Route::put('/text-sessions/{sessionId}/status', [TextSessionController::class, 'updateStatus']);
+    Route::post('/text-sessions/{sessionId}/auto-deduction', [TextSessionController::class, 'processAutoDeduction']);
 
     // Text appointment session routes
     Route::post('/text-appointments/start-session', [TextAppointmentController::class, 'startSession']);
@@ -260,8 +272,9 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/text-appointments/{appointmentId}/session-status', [TextAppointmentController::class, 'getSessionStatus']);
 
     // Call session routes
+    // FIX 4: Rate-limit session creation — max 3 starts per minute per user
     Route::post('/call-sessions/check-availability', [App\Http\Controllers\CallSessionController::class, 'checkAvailability']);
-    Route::post('/call-sessions/start', [App\Http\Controllers\CallSessionController::class, 'start']);
+    Route::post('/call-sessions/start', [App\Http\Controllers\CallSessionController::class, 'start'])->middleware('throttle:3,1');
     Route::get('/call-sessions/{appointmentId}/status', [App\Http\Controllers\CallSessionController::class, 'getStatus']);
     Route::post('/call-sessions/mark-connected', [App\Http\Controllers\CallSessionController::class, 'markConnected']);
     Route::post('/call-sessions/end', [App\Http\Controllers\CallSessionController::class, 'end']);
@@ -504,6 +517,9 @@ Route::middleware(['auth:api', 'role:doctor'])->group(function () {
     Route::delete('/doctor/appointments/{id}', [AppointmentController::class, 'deleteExpiredAppointment']);
     Route::get('/doctor/patients', [AppointmentController::class, 'doctorPatients']);
 
+    // Doctor heartbeat (availability)
+    Route::post('/doctors/heartbeat', [DoctorController::class, 'heartbeat']);
+
     // Doctor wallet routes
     Route::get('/doctor/wallet', [DoctorWalletController::class, 'getWallet']);
     Route::get('/doctor/wallet/transactions', [DoctorWalletController::class, 'getTransactions']);
@@ -727,8 +743,13 @@ Route::post('/test-notification-by-email', function (Illuminate\Http\Request $re
 */
 
 // Payment routes (no auth required for webhooks)
-Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->withoutMiddleware(['auth:sanctum']);
+// FIX 4/5: Rate-limit webhook to 20/min, reject replays in controller
+Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->withoutMiddleware(['auth:sanctum'])->middleware('throttle:20,1');
 Route::get('/payments/status', [PaymentController::class, 'checkStatus'])->withoutMiddleware(['auth:sanctum']);
+
+// FIX 2: Call server (WebRTC signaling) session end notification
+// Secured by X-Server-Secret header — no user JWT required
+Route::post('/call-sessions/server-end', [App\Http\Controllers\CallSessionController::class, 'serverEnd'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
 
 // PayChangu Standard Checkout
 Route::middleware(['auth:api'])->group(function () {

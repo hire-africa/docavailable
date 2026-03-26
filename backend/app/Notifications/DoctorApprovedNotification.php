@@ -3,11 +3,10 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class DoctorApprovedNotification extends Notification implements ShouldQueue
+class DoctorApprovedNotification extends Notification
 {
     use Queueable;
 
@@ -58,14 +57,15 @@ class DoctorApprovedNotification extends Notification implements ShouldQueue
      */
     public function toFcm($notifiable): array
     {
+        $canonicalType = 'doctor_approved';
         return [
             'notification' => [
                 'title' => 'Account Approved! 🎉',
                 'body' => 'Your doctor account has been approved. You can now start receiving appointments.',
             ],
             'data' => [
-                'type' => 'doctor_approved',
-                'notification_type' => 'doctor_approved',
+                'type' => $canonicalType,
+                'notification_type' => 'approved',
                 'click_action' => 'OPEN_DASHBOARD',
             ],
         ];
@@ -76,9 +76,10 @@ class DoctorApprovedNotification extends Notification implements ShouldQueue
      */
     public function toArray($notifiable): array
     {
+        $canonicalType = 'doctor_approved';
         return [
-            'type' => 'doctor_approved',
-            'notification_type' => 'doctor_approved',
+            'type' => $canonicalType,
+            'notification_type' => 'approved',
             'title' => 'Account Approved! 🎉',
             'message' => 'Your doctor account has been approved. You can now start receiving appointments.',
             'data' => [

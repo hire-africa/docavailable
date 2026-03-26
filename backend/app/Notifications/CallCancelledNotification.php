@@ -8,22 +8,23 @@ use App\Models\CallSession;
 use App\Models\User;
 
 /**
- * Notification sent to patient when doctor declines their call.
+ * Notification sent to the peer (usually doctor) when a call is cancelled
+ * by the caller before connection.
  */
-class CallDeclinedNotification extends Notification
+class CallCancelledNotification extends Notification
 {
     use Queueable;
 
     protected $callSession;
-    protected $doctor;
+    protected $caller;
 
     /**
      * Create a new notification instance.
      */
-    public function __construct(CallSession $callSession, User $doctor)
+    public function __construct(CallSession $callSession, User $caller)
     {
         $this->callSession = $callSession;
-        $this->doctor = $doctor;
+        $this->caller = $caller;
     }
 
     /**
@@ -48,19 +49,20 @@ class CallDeclinedNotification extends Notification
      */
     public function toFcm(object $notifiable): array
     {
-        $doctorName = $this->doctor->first_name . ' ' . $this->doctor->last_name;
-        $canonicalType = 'call_declined';
+        $callerName = trim($this->caller->first_name . ' ' . $this->caller->last_name);
+        if (empty($callerName))
+            $callerName = "Patient #{$this->caller->id}";
 
         return [
-            'title' => 'Call Declined',
-            'body' => "Dr. {$doctorName} is not available right now. Please try again later.",
+            'title' => 'Call Cancelled',
+            'body' => "The call from {$callerName} has ended.",
             'data' => [
-                'type' => $canonicalType,
-                'notification_type' => 'declined',
+                'type' => 'call_cancelled',
+                'notification_type' => 'cancelled',
                 'call_session_id' => (string) $this->callSession->id,
                 'appointment_id' => (string) $this->callSession->appointment_id,
                 'call_type' => $this->callSession->call_type,
-                'doctor_id' => (string) $this->doctor->id,
+                'caller_id' => (string) $this->caller->id,
                 'timestamp' => now()->toISOString(),
             ],
         ];
@@ -73,18 +75,19 @@ class CallDeclinedNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
-        $doctorName = $this->doctor->first_name . ' ' . $this->doctor->last_name;
-        $canonicalType = 'call_declined';
+        $callerName = trim($this->caller->first_name . ' ' . $this->caller->last_name);
+        if (empty($callerName))
+            $callerName = "Patient #{$this->caller->id}";
 
         return [
-            'type' => $canonicalType,
-            'notification_type' => 'declined',
+            'type' => 'call_cancelled',
+            'notification_type' => 'cancelled',
             'call_session_id' => $this->callSession->id,
             'appointment_id' => $this->callSession->appointment_id,
             'call_type' => $this->callSession->call_type,
-            'doctor_id' => $this->doctor->id,
-            'doctor_name' => $doctorName,
-            'message' => "Dr. {$doctorName} is not available right now.",
+            'caller_id' => $this->caller->id,
+            'caller_name' => $callerName,
+            'message' => "The call from {$callerName} has ended.",
             'timestamp' => now()->toISOString(),
         ];
     }
