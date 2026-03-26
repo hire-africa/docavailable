@@ -103,7 +103,10 @@ $baseUrl = rtrim(env('WEBRTC_NOTIFICATION_BROADCAST_URL', 'http://127.0.0.1:8080
                 ];
 
                 $response = Http::timeout(2)
-                    ->withHeaders(['Content-Type' => 'application/json'])
+                    ->withHeaders([
+                        'Content-Type' => 'application/json',
+                        'X-Server-Secret' => env('CALL_SERVER_SECRET', '4230C7FB-E7F9-45CB-9798-749FBC82FF51'),
+                    ])
                     ->post($endpoint, $payload);
 
                 Log::info('CallSessionObserver: WebSocket incoming-call broadcast attempted', [
