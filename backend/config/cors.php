@@ -24,6 +24,7 @@ return [
         'http://localhost:8081',
         'http://localhost:8000',
         'https://docavailable.com',
+        'https://www.docavailable.com',
     ],
 
     'allowed_origins_patterns' => [
