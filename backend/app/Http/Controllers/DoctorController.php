@@ -201,8 +201,9 @@ class DoctorController extends Controller
         }
 
         $manuallyOffline = (bool) $availability->manually_offline;
+        $manuallyOnline = (bool) $availability->manually_online;
 
-        $isAvailableNow = $isWithinHours && !$manuallyOffline && $isHeartbeatFresh;
+        $isAvailableNow = ($isWithinHours || $manuallyOnline) && !$manuallyOffline && $isHeartbeatFresh;
         $isOnBreak = $isWithinHours && !$manuallyOffline && !$isHeartbeatFresh;
 
         return [
@@ -210,6 +211,8 @@ class DoctorController extends Controller
             'is_heartbeat_fresh' => $isHeartbeatFresh,
             'is_available_now' => $isAvailableNow,
             'is_on_break' => $isOnBreak,
+            'manually_online' => $manuallyOnline,
+            'manually_offline' => $manuallyOffline,
         ];
     }
 

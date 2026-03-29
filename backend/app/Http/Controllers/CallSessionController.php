@@ -13,6 +13,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Agence104\LiveKit\AccessToken;
+use Agence104\LiveKit\AccessTokenOptions;
+use Agence104\LiveKit\VideoGrant;
 
 class CallSessionController extends Controller
 {
@@ -111,6 +114,29 @@ class CallSessionController extends Controller
     }
 
     /**
+     * Generate LiveKit access token for a room
+     */
+    private function generateLiveKitToken(string $roomName, int|string $userId, string $userName): string
+    {
+        $tokenOptions = (new AccessTokenOptions())
+            ->setIdentity((string) $userId)
+            ->setName($userName)
+            ->setTtl(7200);
+
+        $videoGrant = (new VideoGrant())
+            ->setRoomJoin()
+            ->setRoomName($roomName);
+
+        return (new AccessToken(
+            env('LIVEKIT_API_KEY'),
+            env('LIVEKIT_API_SECRET')
+        ))
+        ->init($tokenOptions)
+        ->setGrant($videoGrant)
+        ->toJwt();
+    }
+
+    /**
      * Start a call session
      */
     public function start(Request $request): JsonResponse
@@ -193,8 +219,6 @@ class CallSessionController extends Controller
                 }
 
                 // Reuse an existing LIVE call_session for this appointment (if any).
-                // Retries must create a NEW call_session once the previous session is terminal.
-                // IMPORTANT: Do not rely on appointments.session_id for call routing/state.
                 $existing = CallSession::where('appointment_id', (string) $appointmentId)
                     ->whereIn('status', [
                         CallSession::STATUS_ACTIVE,
@@ -206,16 +230,61 @@ class CallSessionController extends Controller
                     ->first();
 
                 if ($existing) {
+                    $roomName = 'call_' . $existing->id;
+                    $token = $this->generateLiveKitToken(
+                        $roomName,
+                        $user->id,
+                        trim($user->first_name . ' ' . $user->last_name) ?: 'User'
+                    );
+
                     return response()->json([
                         'success' => true,
                         'message' => 'Call session already exists for this appointment',
                         'data' => [
                             'session_id' => $existing->id,
+                            'call_session_id' => $existing->id,
                             'session_context' => 'call_session:' . $existing->id,
                             'appointment_id' => (string) $appointmentId,
                             'call_type' => $existing->call_type,
                             'status' => $existing->status,
                             'started_at' => $existing->started_at ? $existing->started_at->toISOString() : null,
+                            'livekit_token' => $token,
+                            'livekit_url' => env('LIVEKIT_URL'),
+                        ],
+                    ]);
+                }
+            } else if ($isDirectSession) {
+                // Idempotency for direct sessions: if the same session ID is already active, return it.
+                $existingDirect = CallSession::where('appointment_id', (string) $appointmentId)
+                    ->whereIn('status', [
+                        CallSession::STATUS_ACTIVE,
+                        CallSession::STATUS_CONNECTING,
+                        CallSession::STATUS_WAITING_FOR_DOCTOR,
+                        CallSession::STATUS_ANSWERED,
+                    ])
+                    ->first();
+                
+                if ($existingDirect) {
+                    $roomName = 'call_' . $existingDirect->id;
+                    $token = $this->generateLiveKitToken(
+                        $roomName,
+                        $user->id,
+                        trim($user->first_name . ' ' . $user->last_name) ?: 'User'
+                    );
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Direct call session already exists',
+                        'data' => [
+                            'session_id' => $existingDirect->id,
+                            'call_session_id' => $existingDirect->id,
+                            'session_context' => 'call_session:' . $existingDirect->id,
+                            'appointment_id' => (string) $appointmentId,
+                            'call_type' => $existingDirect->call_type,
+                            'status' => $existingDirect->status,
+                            'started_at' => $existingDirect->started_at ? $existingDirect->started_at->toISOString() : null,
+                            'livekit_token' => $token,
+                            'livekit_url' => env('LIVEKIT_URL'),
                         ],
                     ]);
                 }
@@ -283,6 +352,7 @@ class CallSessionController extends Controller
                         \App\Models\TextSession::STATUS_ACTIVE,
                         \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR
                     ])
+                    ->where('updated_at', '>', now()->subMinutes(10))
                     ->exists();
 
                 $doctorBusyInCall = \App\Models\CallSession::where('doctor_id', $doctorId)
@@ -292,6 +362,12 @@ class CallSessionController extends Controller
                         CallSession::STATUS_WAITING_FOR_DOCTOR,
                         CallSession::STATUS_ANSWERED,
                     ])
+                    ->where('appointment_id', '!=', (string) $appointmentId)
+                    ->where(function ($query) {
+                        // A session is only "busy" if it's ACTIVE, or if it's a new connection attempt (< 1 min old)
+                        $query->whereIn('status', [CallSession::STATUS_ACTIVE, CallSession::STATUS_ANSWERED])
+                              ->orWhere('created_at', '>', now()->subMinutes(1));
+                    })
                     ->exists();
 
                 if ($doctorBusyInText || $doctorBusyInCall) {
@@ -299,6 +375,8 @@ class CallSessionController extends Controller
                         'success' => false,
                         'message' => 'Doctor is currently in another session',
                         'error_code' => 'DOCTOR_BUSY',
+                        'debug_busy_call' => $doctorBusyInCall,
+                        'debug_busy_text' => $doctorBusyInText
                     ], 409);
                 }
             }
@@ -413,13 +491,21 @@ class CallSessionController extends Controller
                 ]);
             }
 
-            Log::info("Call session started", [
+            $roomName = 'call_' . $callSession->id;
+            $token = $this->generateLiveKitToken(
+                $roomName,
+                $user->id,
+                trim($user->first_name . ' ' . $user->last_name) ?: 'User'
+            );
+
+            Log::info("Call session started (LiveKit Token created)", [
                 'user_id' => $user->id,
                 'call_session_id' => $callSession->id,
                 'call_type' => $callType,
                 'appointment_id' => $appointmentId,
                 'doctor_id' => $doctorId,
-                'remaining_calls' => $totalRemaining
+                'remaining_calls' => $totalRemaining,
+                'room_name' => $roomName
             ]);
 
             return response()->json([
@@ -436,6 +522,8 @@ class CallSessionController extends Controller
                     'notified' => $notified ?? false,
                     'tokens' => $tokensCount ?? 0,
                     'last_notified_at' => now()->toISOString(),
+                    'livekit_token' => $token,
+                    'livekit_url' => env('LIVEKIT_URL'),
                 ],
                 'remaining_calls' => $totalRemaining,
                 'call_type' => $callType,
@@ -1362,29 +1450,51 @@ class CallSessionController extends Controller
     }
 
     /**
-     * Handle call answer from notification
+     * Handle call answer from notification and provide LiveKit token
      */
     public function answer(Request $request): JsonResponse
     {
         $appointmentId = $request->input('appointment_id');
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'User not authenticated'], 401);
+        }
 
         $callSession = CallSession::where('appointment_id', $appointmentId)
+            ->where('status', '!=', CallSession::STATUS_ENDED)
             ->latest()
             ->first();
 
+        if (!$callSession) {
+            return response()->json(['success' => false, 'message' => 'Active call session not found'], 404);
+        }
+
+        // Mark as active and connected for billing immediately
         $callSession->update([
+            'status' => CallSession::STATUS_ACTIVE,
+            'connected_at' => now(),
             'answered_at' => now(),
-            'answered_by' => auth()->id(),
+            'answered_by' => $user->id,
+            'is_connected' => true,
         ]);
 
         $callSession->refresh();
 
-        // Dispatch job to promote to connected after 5 seconds
-        PromoteCallToConnected::dispatch($callSession->id, $appointmentId)
-            ->delay(now()->addSeconds(5));
+        $roomName = 'call_' . $callSession->id;
+        $token = $this->generateLiveKitToken(
+            $roomName,
+            $user->id,
+            trim($user->first_name . ' ' . $user->last_name) ?: 'User'
+        );
 
         return response()->json([
             'success' => true,
+            'session_id' => $callSession->id,
+            'call_session_id' => $callSession->id,
+            'livekit_token' => $token,
+            'livekit_url' => env('LIVEKIT_URL'),
+            'status' => $callSession->status,
             'answered_at' => $callSession->answered_at,
             'answered_by' => $callSession->answered_by,
         ]);
