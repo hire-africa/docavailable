@@ -50,7 +50,12 @@ class ProcessActiveCallBilling extends Command
 
                             // Cut the call when the last remaining session is consumed.
                             if ($remaining === 0) {
-                                $this->terminateCallDueToExhaustedSessions($session->id, 'server_billing_remaining_calls_0');
+                                $autoDeductions = (int) ($result['data']['auto_deductions'] ?? 0);
+                                $this->terminateCallDueToExhaustedSessions(
+                                    $session->id,
+                                    'server_billing_remaining_calls_0',
+                                    $autoDeductions
+                                );
                             }
                         } else {
                             $skipped++;
@@ -87,7 +92,7 @@ class ProcessActiveCallBilling extends Command
      * - We always mark the DB call session as ended (idempotent).
      * - LiveKit deletion is best-effort: if it fails, DB ending still prevents further billing.
      */
-    private function terminateCallDueToExhaustedSessions(int $callSessionId, string $reason): void
+    private function terminateCallDueToExhaustedSessions(int $callSessionId, string $reason, int $targetAutoDeductions = 0): void
     {
         $roomName = 'call_' . $callSessionId;
         $now = now();
@@ -106,10 +111,20 @@ class ProcessActiveCallBilling extends Command
                 return;
             }
 
+            // Freeze `ended_at` to the bucket boundary that was just billed.
+            // This prevents a race where a few seconds of extra duration could push `end()`
+            // into charging the next 10-minute bucket.
+            $endedAt = $now;
+            if (!empty($callSession->connected_at) && $targetAutoDeductions > 0) {
+                $bucketSeconds = $targetAutoDeductions * 600; // 10-minute buckets
+                $computedEndedAt = $callSession->connected_at->copy()->addSeconds($bucketSeconds);
+                $endedAt = $computedEndedAt->lessThanOrEqualTo($now) ? $computedEndedAt : $now;
+            }
+
             $callSession->update([
                 'status' => CallSession::STATUS_ENDED,
-                'ended_at' => $now,
-                'last_activity_at' => $now,
+                'ended_at' => $endedAt,
+                'last_activity_at' => $endedAt,
                 'is_connected' => false,
                 'reason' => $reason,
                 // Prevent any extra +1 manual hangup billing if/when the client later calls /end
