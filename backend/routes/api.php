@@ -822,7 +822,7 @@ Route::post('/oauth/exchange-code', function (Request $request) {
         $redirectUri = $request->input('redirect_uri');
 
         // Google OAuth configuration
-        $clientId = env('GOOGLE_CLIENT_ID', '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com');
+        $clientId = env('GOOGLE_CLIENT_ID', '449082896435-jjjniiru1niu4fpparkdfmabtqt2560n.apps.googleusercontent.com');
         $clientSecret = env('GOOGLE_CLIENT_SECRET', '');
 
         if (!$clientSecret) {
