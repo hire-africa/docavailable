@@ -27,8 +27,11 @@ WORKDIR /var/www
 # Copy the entire application
 COPY . .
 
-# Install dependencies
+# Install root-level dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
+
+# Install backend Laravel dependencies (separate composer.json)
+RUN cd backend && composer install --no-dev --optimize-autoloader --no-interaction
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www \
