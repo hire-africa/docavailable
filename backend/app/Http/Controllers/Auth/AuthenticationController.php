@@ -676,7 +676,7 @@ class AuthenticationController extends Controller
             $googleUser = $verifiedIdToken;
             $email = $googleUser['email'];
             $googleId = $googleUser['sub']; // Google's unique user ID
-            $userType = $request->input('user_type', 'patient'); // Default to patient if not specified
+            $userType = $request->input('user_type'); // No default, let onboarding handle it if missing
 
             // Check if user exists
             $user = User::where('email', $email)->first();
@@ -858,13 +858,18 @@ class AuthenticationController extends Controller
             }
 
             // Verify the token is for our application (audience check)
-            $expectedClientId = env('GOOGLE_CLIENT_ID');
-            if ($expectedClientId && isset($payload['aud']) && $payload['aud'] !== $expectedClientId) {
-                Log::error('Google token verification failed - audience mismatch', [
-                    'expected' => $expectedClientId,
-                    'received' => $payload['aud']
-                ]);
-                return false;
+            $webClientId = env('GOOGLE_CLIENT_ID');
+            $mobileClientId = env('GOOGLE_MOBILE_CLIENT_ID');
+            $allowedClientIds = array_filter([$webClientId, $mobileClientId]);
+
+            if (!empty($allowedClientIds) && isset($payload['aud'])) {
+                if (!in_array($payload['aud'], $allowedClientIds)) {
+                    Log::error('Google token verification failed - audience mismatch', [
+                        'allowed' => $allowedClientIds,
+                        'received' => $payload['aud']
+                    ]);
+                    return false;
+                }
             }
 
             // Verify issuer
