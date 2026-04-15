@@ -10,52 +10,41 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     zip \
     unzip \
-    postgresql-client
-
-# Clear cache
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+    libpq-dev \
+    postgresql-client \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip
+RUN docker-php-ext-install pdo_pgsql mbstring exif pcntl bcmath gd zip
 
-# Get latest Composer
+# Get Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Set working directory
 WORKDIR /var/www
 
-# ── Layer-cache composer installs (only re-runs when composer.json/lock changes) ──
-# Copy root composer files first
-COPY composer.json composer.lock* ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Copy composer files first for better caching and to satisfy Kaniko optimizer
+COPY composer.json composer.lock ./
 
-# Copy backend composer files next
-COPY backend/composer.json backend/composer.lock* ./backend/
-RUN cd backend && composer install --no-dev --optimize-autoloader --no-interaction
+# Install dependencies without scripts/autoloader for better caching
+RUN composer install --no-dev --no-scripts --no-autoloader --no-interaction
 
-# Now copy the rest of the application code
+# Copy the rest of the application
 COPY . .
 
-# Set proper permissions
-RUN chown -R www-data:www-data /var/www \
-    && chmod -R 755 /var/www \
-    && chmod -R 775 backend/storage \
-    && chmod -R 775 backend/bootstrap/cache
+# Finalize composer install
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Create backend storage directories
-RUN mkdir -p backend/storage/framework/{sessions,views,cache} \
-    && mkdir -p backend/storage/logs \
-    && chmod -R 775 backend/storage \
-    && chmod -R 775 backend/bootstrap/cache
+# Set permissions
+RUN chown -R www-data:www-data /var/www && chmod -R 755 /var/www
 
-# Copy backend environment file if it doesn't exist
-RUN if [ ! -f backend/.env ]; then cp backend/.env.example backend/.env 2>/dev/null || true; fi
+# Create storage directories
+RUN mkdir -p storage/framework/{sessions,views,cache} storage/logs \
+    && chmod -R 775 storage bootstrap/cache
 
-# Generate application key
-RUN cd backend && php artisan key:generate --force || echo "Key already exists"
+# Environment variables will be provided by Digital Ocean
+# No need to create .env file as it will override environment variables
 
-# Expose port 8080
-EXPOSE 8080
-
-# Start server with proper configuration
-CMD ["sh", "-c", "cd backend && echo '=== LARAVEL STARTUP ===' && php artisan config:clear && php artisan cache:clear && php artisan route:clear && php artisan view:clear && echo 'Testing database connection...' && php artisan tinker --execute='DB::connection()->getPdo(); echo \"Database connected successfully\";' && echo 'Running migrations...' && php artisan migrate --force || echo 'Migration failed, continuing anyway' && echo 'Starting Laravel server...' && php -S 0.0.0.0:8080 -t public"]
+# Start the application - generate key, try migrations, then start server
+CMD ["sh", "-c", "echo '=== LARAVEL STARTUP ===' && php artisan config:clear && php artisan cache:clear && php artisan route:clear && php artisan view:clear && echo 'Testing database connection...' && php artisan tinker --execute='DB::connection()->getPdo(); echo \"Database connected successfully\";' && if [ \"${SKIP_MIGRATIONS:-0}\" = \"1\" ]; then echo 'Skipping migrations (SKIP_MIGRATIONS=1)'; else echo 'Running migrations...' && php artisan migrate --force || echo 'Migration failed, continuing anyway'; fi && if [ \"${RUN_SCHEDULER:-0}\" = \"1\" ]; then echo 'Starting Laravel scheduler (RUN_SCHEDULER=1)...' && php artisan schedule:work; else echo 'Starting Laravel server...' && php -S 0.0.0.0:8080 -t public; fi"]
