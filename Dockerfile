@@ -24,11 +24,11 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy composer files first for better caching
-COPY composer.json composer.lock ./
+# Copy composer.json first for better caching and internal sync
+COPY composer.json ./
 
-# Install dependencies without scripts/autoloader
-RUN composer install --no-dev --no-scripts --no-autoloader --no-interaction
+# Generate/Update lock file inside the container
+RUN composer update --no-dev --no-scripts --no-autoloader --no-interaction
 
 # Copy the entire application
 COPY . .
