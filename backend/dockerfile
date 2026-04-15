@@ -24,11 +24,12 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy composer files first for better caching and to satisfy Kaniko optimizer
-COPY composer.json composer.lock ./
+# Copy composer.json first to satisfy Kaniko optimizer and handle dependencies
+COPY composer.json ./
 
-# Install dependencies without scripts/autoloader for better caching
-RUN composer install --no-dev --no-scripts --no-autoloader --no-interaction
+# Generate/Update lock file inside the container (uses PHP 8.2)
+# This resolves "out of sync" errors between composer.json and composer.lock
+RUN composer update --no-dev --no-scripts --no-autoloader --no-interaction
 
 # Copy the rest of the application
 COPY . .
