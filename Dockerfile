@@ -24,14 +24,17 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
+# Copy composer files first for better caching
+COPY composer.json composer.lock ./
+
+# Install dependencies without scripts/autoloader
+RUN composer install --no-dev --no-scripts --no-autoloader --no-interaction
+
 # Copy the entire application
 COPY . .
 
-# Install root-level dependencies
+# Finalize composer install
 RUN composer install --no-dev --optimize-autoloader --no-interaction
-
-# Install backend Laravel dependencies (separate composer.json)
-RUN cd backend && composer install --no-dev --optimize-autoloader --no-interaction
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www \
