@@ -629,13 +629,13 @@ class PaymentController extends Controller
 
             Log::info('Payment status check requested', ['tx_ref' => $txRef]);
 
-            // STEP 1: Check DigitalOcean database FIRST (webhook may have already marked it completed)
+            // STEP 1: Check database first — webhook may have already marked it completed
             $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
                 ->orWhere('gateway_reference', $txRef)
                 ->first();
 
             if ($transaction && $transaction->status === 'completed') {
-                Log::info('Payment already confirmed in database', ['tx_ref' => $txRef, 'status' => $transaction->status]);
+                Log::info('Payment confirmed in database', ['tx_ref' => $txRef]);
                 return response()->json([
                     'success' => true,
                     'message' => 'Payment verified from database',
@@ -649,36 +649,48 @@ class PaymentController extends Controller
                 ]);
             }
 
-            // STEP 2: Fallback to PayChangu verify API (for fresh transactions not yet processed by webhook)
-            Log::info('Transaction not yet completed in database, checking PayChangu API', ['tx_ref' => $txRef]);
+            // STEP 2: Transaction exists but is still pending — return 200 so the frontend
+            // keeps polling without treating it as an error. Don't call PayChangu's verify
+            // API here because PayChangu returns non-2xx for unpaid tx_refs, which looks
+            // like a hard failure when it's just the normal "user hasn't paid yet" state.
+            if ($transaction && $transaction->status === 'pending') {
+                Log::info('Transaction pending, waiting for webhook', ['tx_ref' => $txRef]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment pending',
+                    'data' => [
+                        'status' => 'pending',
+                        'tx_ref' => $txRef
+                    ]
+                ]);
+            }
+
+            // STEP 3: Transaction not in DB at all, or in a failed state — call PayChangu
+            // to get the definitive status (e.g. user completed payment but webhook hasn't fired yet)
+            Log::info('Checking PayChangu API for transaction status', ['tx_ref' => $txRef]);
             $payChanguService = new \App\Services\PayChanguService();
             $verification = $payChanguService->verify($txRef);
 
             if (!$verification['ok']) {
+                Log::warning('PayChangu verify API call failed', ['tx_ref' => $txRef, 'error' => $verification['error']]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'Payment verification failed',
-                    'error' => $verification['error'] ?? 'Unknown error'
-                ], 400);
+                    'message' => 'Payment pending',
+                    'data' => ['status' => 'pending', 'tx_ref' => $txRef]
+                ]);
             }
 
             $data = $verification['data'];
 
-            // Verify critical fields as per PayChangu documentation
             if (!$data || !isset($data['status'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid verification response'
-                ], 400);
+                    'message' => 'Payment pending',
+                    'data' => ['status' => 'pending', 'tx_ref' => $txRef]
+                ]);
             }
 
-            // Check if payment is successful
             if ($data['status'] === 'success') {
-                // Find our transaction record
-                $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
-                    ->orWhere('gateway_reference', $txRef)
-                    ->first();
-
                 if ($transaction) {
                     $transaction->update([
                         'status' => 'completed',
@@ -694,16 +706,14 @@ class PaymentController extends Controller
                     'message' => 'Payment verified successfully',
                     'data' => [
                         'status' => $data['status'],
-                        'amount' => $data['amount'],
-                        'currency' => $data['currency'],
-                        'tx_ref' => $data['tx_ref'],
-                        'reference' => $data['reference'],
+                        'amount' => $data['amount'] ?? null,
+                        'currency' => $data['currency'] ?? null,
+                        'tx_ref' => $data['tx_ref'] ?? $txRef,
+                        'reference' => $data['reference'] ?? null,
                         'transaction_id' => $transaction->id ?? null
                     ]
                 ]);
             } else {
-                // Return 200 (not 400) for pending/failed states — this is normal during polling
-                // while the user is still completing payment on the checkout page.
                 return response()->json([
                     'success' => false,
                     'message' => 'Payment not yet completed',
