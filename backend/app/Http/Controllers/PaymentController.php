@@ -75,25 +75,31 @@ class PaymentController extends Controller
 
             Log::info('Webhook signature verified successfully');
 
-            // Step 2: Parse webhook data
+            // Step 2: Parse webhook data flexibly
             $data = $request->all();
-            Log::info('Webhook payload parsed', ['data' => $data]);
+            Log::info('Webhook payload received', ['data' => $data]);
 
-            // Step 3: Check event type (Paychangu specific)
-            if (!isset($data['event_type'])) {
-                Log::error('Missing event_type in webhook payload', ['data' => $data]);
-                return response()->json(['error' => 'Missing event_type'], 200);
-            }
-            // Normalize event type to avoid casing/spacing issues
-            $event = strtolower(trim($data['event_type']));
-            $allowedEventTypes = ['api.charge.payment', 'checkout.payment'];
+            // FLEXIBLE EVENT TYPE CHECKING
+            $eventType = $data['event_type'] ?? $data['event'] ?? 'unknown';
+            $event = strtolower(trim($eventType));
+            $allowedEventTypes = ['api.charge.payment', 'checkout.payment', 'payment.success', 'charge.success', 'transaction.completed'];
+            
             if (!in_array($event, $allowedEventTypes, true)) {
-                Log::info('Unsupported event type', ['event_type' => $data['event_type']]);
+                Log::info('Unsupported event type', ['event_type' => $eventType]);
                 return response()->json(['message' => 'Event type not supported'], 200);
             }
             $data['event_type'] = $event;
 
-            // Step 4: Parse meta data (Paychangu sends this as JSON string)
+            // FLEXIBLE STATUS CHECKING
+            $status = strtolower($data['status'] ?? $data['data']['status'] ?? 'failed');
+            $successStatuses = ['success', 'successful', 'completed', 'paid'];
+            
+            if (!in_array($status, $successStatuses)) {
+                Log::info('Payment status not success', ['status' => $status]);
+                return response()->json(['message' => 'Payment status not success'], 200);
+            }
+
+            // Step 4: Parse meta data flexibly (Payload can be string or object)
             $meta = [];
             if (isset($data['meta'])) {
                 if (is_string($data['meta'])) {
@@ -103,15 +109,21 @@ class PaymentController extends Controller
                 }
             }
 
-            Log::info('Parsed meta data', ['meta' => $meta]);
+            // Check for user_id and plan_id in meta OR at top level
+            $userId = $meta['user_id'] ?? $data['user_id'] ?? $data['data']['user_id'] ?? null;
+            $planId = $meta['plan_id'] ?? $data['plan_id'] ?? $data['data']['plan_id'] ?? null;
 
-            if (empty($meta['user_id'])) {
-                Log::error('Payment webhook missing user_id in meta', ['data' => $data, 'meta' => $meta]);
-                return response()->json(['error' => 'Missing user_id in meta data'], 200);
+            if (!$userId) {
+                Log::error('Payment webhook missing user_id', ['data' => $data, 'meta' => $meta]);
+                return response()->json(['error' => 'Missing user_id'], 200);
             }
 
+            // Sync meta for processSuccessfulPayment
+            $meta['user_id'] = $userId;
+            if ($planId) $meta['plan_id'] = $planId;
+
             // Step 5: Check payment status
-            if ($data['status'] === 'success') {
+            if (in_array($status, $successStatuses)) {
                 // Step 6: ALWAYS RE-QUERY - Verify with PayChangu API before processing
                 // Prefer tx_ref when available per PayChangu docs
                 $transactionId = $data['tx_ref'] ?? $data['charge_id'] ?? $data['reference'] ?? null;
@@ -160,8 +172,8 @@ class PaymentController extends Controller
             $amount = $data['amount'];
             $currency = $data['currency'];
 
-            // Use correct Paychangu transaction ID fields
-            $transactionId = $data['tx_ref'] ?? $data['charge_id'] ?? $data['reference'] ?? null;
+            // Use correct Paychangu transaction ID fields (Flexible)
+            $transactionId = $data['tx_ref'] ?? $data['charge_id'] ?? $data['reference'] ?? $data['data']['id'] ?? $data['data']['tx_ref'] ?? null;
 
             if (!$transactionId) {
                 Log::error('Missing transaction ID in Paychangu webhook', ['data' => $data]);
@@ -690,14 +702,16 @@ class PaymentController extends Controller
                     ]
                 ]);
             } else {
+                // Return 200 (not 400) for pending/failed states — this is normal during polling
+                // while the user is still completing payment on the checkout page.
                 return response()->json([
                     'success' => false,
-                    'message' => 'Payment not successful',
+                    'message' => 'Payment not yet completed',
                     'data' => [
                         'status' => $data['status'],
                         'tx_ref' => $data['tx_ref'] ?? $txRef
                     ]
-                ], 400);
+                ]);
             }
 
         } catch (\Exception $e) {
