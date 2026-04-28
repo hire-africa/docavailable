@@ -468,47 +468,9 @@ Route::middleware(['auth:api'])->get('/debug/user-country', function () {
 // Public upload routes (for registration process - no auth required)
 Route::post('/upload/profile-picture-public', [FileUploadController::class, 'uploadProfilePicturePublic']);
 
-// Admin routes (admin only)
-Route::middleware(['auth:api', 'role:admin'])->group(function () {
-    Route::get('/admin/users', [AdminController::class, 'getAllUsers']);
-    Route::get('/admin/appointments', [AdminController::class, 'getAllAppointments']);
-    Route::patch('/admin/users/{userId}/role', [AdminController::class, 'updateUserRole']);
-    Route::get('/admin/dashboard-stats', [AdminController::class, 'getDashboardStats']);
 
-    // Doctor approval routes
-    Route::get('/admin/doctors/pending', [AdminController::class, 'getPendingDoctors']);
-    Route::get('/admin/doctors/{doctorId}', [AdminController::class, 'getDoctorDetails']);
-    Route::post('/admin/doctors/{doctorId}/approve', [AdminController::class, 'approveDoctor']);
-    Route::post('/admin/doctors/{doctorId}/reject', [AdminController::class, 'rejectDoctor']);
+// Admin routes removed - moved to new site
 
-    // Withdrawal request management routes
-    Route::get('/admin/withdrawal-requests', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'index']);
-    Route::get('/admin/withdrawal-requests/stats', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'getStats']);
-    Route::get('/admin/withdrawal-requests/{id}', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'show']);
-    Route::post('/admin/withdrawal-requests/{id}/approve', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'approve']);
-    Route::post('/admin/withdrawal-requests/{id}/reject', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'reject']);
-    Route::post('/admin/withdrawal-requests/{id}/mark-as-paid', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'markAsPaid']);
-    Route::post('/admin/withdrawal-requests/send-completion-email', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'sendWithdrawalCompletedEmail']);
-
-    // Plan management
-    Route::get('/admin/plans', [\App\Http\Controllers\Admin\PlanController::class, 'index']);
-    Route::post('/admin/plans', [\App\Http\Controllers\Admin\PlanController::class, 'store']);
-    Route::patch('/admin/plans/{id}', [\App\Http\Controllers\Admin\PlanController::class, 'update']);
-    Route::delete('/admin/plans/{id}', [\App\Http\Controllers\Admin\PlanController::class, 'destroy']);
-    Route::post('/admin/users', [AdminController::class, 'createUser']);
-    Route::patch('/admin/users/{userId}', [AdminController::class, 'updateUser']);
-    Route::delete('/admin/users/{userId}', [AdminController::class, 'deleteUser']);
-
-    // Performance monitoring routes
-    Route::get('/admin/performance/overall-stats', [PerformanceController::class, 'getOverallStats']);
-    Route::get('/admin/performance/endpoint-stats', [PerformanceController::class, 'getEndpointStats']);
-    Route::get('/admin/performance/slowest-endpoints', [PerformanceController::class, 'getSlowestEndpoints']);
-    Route::get('/admin/performance/cache-stats', [PerformanceController::class, 'getCacheStats']);
-    Route::get('/admin/performance/database-stats', [PerformanceController::class, 'getDatabaseStats']);
-    Route::get('/admin/performance/system-stats', [PerformanceController::class, 'getSystemStats']);
-    Route::get('/admin/performance/queue-stats', [PerformanceController::class, 'getQueueStats']);
-    Route::post('/admin/performance/clear-cache', [PerformanceController::class, 'clearPerformanceCache']);
-});
 
 // Doctor routes (doctor only)
 Route::middleware(['auth:api', 'role:doctor'])->group(function () {
@@ -527,6 +489,9 @@ Route::middleware(['auth:api', 'role:doctor'])->group(function () {
     Route::post('/doctor/wallet/withdraw', [DoctorWalletController::class, 'requestWithdrawal']);
     Route::get('/doctor/wallet/withdrawal-requests', [DoctorWalletController::class, 'getWithdrawalRequests']);
     Route::get('/doctor/wallet/payment-rates', [DoctorWalletController::class, 'getPaymentRates']);
+    Route::post('/doctor/wallet/payment-methods', [DoctorWalletController::class, 'addPaymentMethod']);
+    Route::delete('/doctor/wallet/payment-methods/{id}', [DoctorWalletController::class, 'deletePaymentMethod']);
+    Route::post('/doctor/wallet/payment-methods/{id}/delete', [DoctorWalletController::class, 'deletePaymentMethod']);
 
 });
 
@@ -745,6 +710,7 @@ Route::post('/test-notification-by-email', function (Illuminate\Http\Request $re
 // Payment routes (no auth required for webhooks)
 // FIX 4/5: Rate-limit webhook to 20/min, reject replays in controller
 Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->withoutMiddleware(['auth:sanctum'])->middleware('throttle:20,1');
+Route::post('/payments/test-webhook', [PaymentController::class, 'testWebhook'])->withoutMiddleware(['auth:sanctum']);
 Route::get('/payments/status', [PaymentController::class, 'checkStatus'])->withoutMiddleware(['auth:sanctum']);
 
 // FIX 2: Call server (WebRTC signaling) session end notification
@@ -808,6 +774,7 @@ Route::post('/oauth/exchange-code', function (Request $request) {
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'code' => 'required|string',
             'redirect_uri' => 'required|string',
+            'code_verifier' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -820,10 +787,11 @@ Route::post('/oauth/exchange-code', function (Request $request) {
 
         $code = $request->input('code');
         $redirectUri = $request->input('redirect_uri');
+        $codeVerifier = $request->input('code_verifier');
 
         // Google OAuth configuration
-        $clientId = env('GOOGLE_CLIENT_ID', '449082896435-jjjniiru1niu4fpparkdfmabtqt2560n.apps.googleusercontent.com');
-        $clientSecret = env('GOOGLE_CLIENT_SECRET', '');
+        $clientId = env('GOOGLE_CLIENT_ID');
+        $clientSecret = env('GOOGLE_CLIENT_SECRET');
 
         if (!$clientSecret) {
             return response()->json([
@@ -841,6 +809,10 @@ Route::post('/oauth/exchange-code', function (Request $request) {
             'grant_type' => 'authorization_code',
             'redirect_uri' => $redirectUri,
         ];
+
+        if ($codeVerifier) {
+            $tokenData['code_verifier'] = $codeVerifier;
+        }
 
         $response = \Illuminate\Support\Facades\Http::asForm()->post($tokenUrl, $tokenData);
 
@@ -885,67 +857,4 @@ Route::post('/oauth/exchange-code', function (Request $request) {
     }
 })->withoutMiddleware(['auth:sanctum', 'auth:api']);
 
-// Manual queue processing endpoint (for testing and backup)
-Route::post('/admin/process-queue', function () {
-    try {
-        $jobs = \Illuminate\Support\Facades\DB::table('jobs')->where('queue', 'text-sessions')->get();
 
-        if ($jobs->count() === 0) {
-            return response()->json([
-                'success' => true,
-                'message' => 'No pending jobs found',
-                'processed' => 0
-            ]);
-        }
-
-        $processedCount = 0;
-
-        foreach ($jobs as $job) {
-            try {
-                $payload = json_decode($job->payload);
-                $jobClass = $payload->displayName ?? 'Unknown';
-                $jobData = $payload->data ?? [];
-
-                if (strpos($jobClass, 'ProcessTextSessionAutoDeduction') !== false) {
-                    $sessionId = $jobData->sessionId ?? null;
-                    $expectedDeductionCount = $jobData->expectedDeductionCount ?? 1;
-
-                    if ($sessionId) {
-                        $autoDeductionJob = new \App\Jobs\ProcessTextSessionAutoDeduction($sessionId, $expectedDeductionCount);
-                        $autoDeductionJob->handle();
-                        $processedCount++;
-                    }
-
-                } elseif (strpos($jobClass, 'EndTextSession') !== false) {
-                    $sessionId = $jobData->sessionId ?? null;
-                    $reason = $jobData->reason ?? 'time_expired';
-
-                    if ($sessionId) {
-                        $autoEndJob = new \App\Jobs\EndTextSession($sessionId, $reason);
-                        $autoEndJob->handle();
-                        $processedCount++;
-                    }
-                }
-
-                // Delete the processed job
-                \Illuminate\Support\Facades\DB::table('jobs')->where('id', $job->id)->delete();
-
-            } catch (Exception $e) {
-                \Illuminate\Support\Facades\Log::error('Failed to process queue job: ' . $e->getMessage());
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => "Processed {$processedCount} jobs",
-            'processed' => $processedCount,
-            'total_found' => $jobs->count()
-        ]);
-
-    } catch (Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to process queue: ' . $e->getMessage()
-        ], 500);
-    }
-});
