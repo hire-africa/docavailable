@@ -555,19 +555,23 @@ class PaymentController extends Controller
     }
 
     /**
-     * Common helper to render the HTML redirect page for WebView
+     * Common helper to render the HTML redirect page for WebView / iframe.
+     *
+     * Signal priority:
+     *   1. window.ReactNativeWebView.postMessage — native mobile WebView
+     *   2. window.parent.postMessage             — web iframe (CheckoutWebViewModal on web)
+     *   3. window.location.href redirect         — standalone browser tab fallback
      */
     private function renderRedirectPage($transaction, $txRef, $status)
     {
         $final_status = $transaction ? $transaction->status : $status;
-        // Frontend URL for browser redirect after payment (must be a valid absolute URL)
-        $frontendUrl = rtrim((string) config('app.frontend_url', 'https://docavailable.com'), '/');
+        // Frontend URL for standalone-tab browser redirect fallback
+        $frontendUrl = rtrim((string) config('app.frontend_url', 'https://docavailable1-izk3m.ondigitalocean.app'), '/');
         if (!preg_match('#^https?://#i', $frontendUrl)) {
-            $frontendUrl = 'https://docavailable.com';
+            $frontendUrl = 'https://docavailable1-izk3m.ondigitalocean.app';
         }
         $redirectUrl = $frontendUrl . '/?payment_status=' . urlencode($final_status) . '&tx_ref=' . urlencode($txRef);
 
-        // Return a invisible, instant redirect page
         $html = '<!DOCTYPE html>
 <html>
 <head>
@@ -581,33 +585,32 @@ class PaymentController extends Controller
     </div>
     <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
     <script>
-        function doRedirect() {
-            // 1. Signal WebView via postMessage (Primary closure mechanism)
-            if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: "close_window",
-                    status: "' . $final_status . '",
-                    tx_ref: "' . $txRef . '"
-                }));
-            } else {
-                // 2. Browser/tab fallback: redirect back to main app URL
-                // This handles flows where checkout was opened in a new tab or external browser.
-                setTimeout(function() {
-                    window.location.href = ' . json_encode($redirectUrl) . ';
-                }, 1500);
-            }
-        }
+        (function () {
+            var msg = JSON.stringify({
+                type: "close_window",
+                status: "' . $final_status . '",
+                tx_ref: "' . $txRef . '"
+            });
 
-        // Execute closure signal immediately
-        doRedirect();
-        
-        // Manual fallback for deep link if needed
-        function manualDeepLink() {
-            const deepLink = "com.docavailable.app://payment-result?status=" + 
-                encodeURIComponent("' . $final_status . '") + 
-                "&tx_ref=" + encodeURIComponent("' . $txRef . '");
-            window.location.href = deepLink;
-        }
+            // 1. Native React Native WebView (mobile app)
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(msg);
+                return;
+            }
+
+            // 2. Web iframe — signal the parent React app via postMessage.
+            //    CheckoutWebViewModal listens via window.addEventListener("message", ...)
+            //    and calls onPaymentDetected() which closes the modal cleanly.
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage(msg, "*");
+                return;
+            }
+
+            // 3. Standalone browser tab fallback: navigate back to the app with status params.
+            setTimeout(function () {
+                window.location.href = ' . json_encode($redirectUrl) . ';
+            }, 1500);
+        })();
     </script>
 </body>
 </html>';
@@ -649,30 +652,19 @@ class PaymentController extends Controller
                 ]);
             }
 
-            // STEP 2: Transaction exists but is still pending — return 200 so the frontend
-            // keeps polling without treating it as an error. Don't call PayChangu's verify
-            // API here because PayChangu returns non-2xx for unpaid tx_refs, which looks
-            // like a hard failure when it's just the normal "user hasn't paid yet" state.
-            if ($transaction && $transaction->status === 'pending') {
-                Log::info('Transaction pending, waiting for webhook', ['tx_ref' => $txRef]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Payment pending',
-                    'data' => [
-                        'status' => 'pending',
-                        'tx_ref' => $txRef
-                    ]
-                ]);
-            }
-
-            // STEP 3: Transaction not in DB at all, or in a failed state — call PayChangu
-            // to get the definitive status (e.g. user completed payment but webhook hasn't fired yet)
+            // STEP 2: Transaction pending or not in DB — verify directly with PayChangu.
+            // We cannot rely solely on the webhook (it may be delayed or misconfigured).
+            // PayChangu returns a non-2xx / error body for genuinely unpaid tx_refs, so
+            // we treat any failed verification as "still pending" rather than a hard error.
             Log::info('Checking PayChangu API for transaction status', ['tx_ref' => $txRef]);
             $payChanguService = new \App\Services\PayChanguService();
             $verification = $payChanguService->verify($txRef);
 
             if (!$verification['ok']) {
-                Log::warning('PayChangu verify API call failed', ['tx_ref' => $txRef, 'error' => $verification['error']]);
+                Log::info('PayChangu verify returned not-ok (payment likely not completed yet)', [
+                    'tx_ref' => $txRef,
+                    'error' => $verification['error'] ?? null
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Payment pending',
@@ -691,14 +683,63 @@ class PaymentController extends Controller
             }
 
             if ($data['status'] === 'success') {
+                // Mark transaction completed in DB
                 if ($transaction) {
                     $transaction->update([
                         'status' => 'completed',
                         'metadata' => array_merge($transaction->metadata ?? [], [
-                            'verification_response' => $verification['body'],
+                            'verification_response' => $verification['body'] ?? $data,
                             'verified_at' => now()->toISOString()
                         ])
                     ]);
+                }
+
+                // Activate subscription if not already done (webhook may not have fired)
+                if ($transaction && $transaction->status !== 'completed') {
+                    try {
+                        $meta = $transaction->metadata ?? [];
+                        $planId = $meta['plan_id'] ?? null;
+                        $userId = $transaction->user_id;
+
+                        if ($planId && $userId) {
+                            // Check if subscription was already activated for this transaction
+                            $existingSub = \App\Models\Subscription::where('payment_transaction_id', $txRef)->first();
+                            if (!$existingSub) {
+                                Log::info('Activating subscription via status poll (webhook fallback)', [
+                                    'tx_ref' => $txRef,
+                                    'user_id' => $userId,
+                                    'plan_id' => $planId,
+                                ]);
+                                $this->activatePlanForUser($userId, $planId, $txRef);
+                            }
+                        }
+                    } catch (\Exception $activationError) {
+                        Log::warning('Subscription activation during status poll failed (may already exist)', [
+                            'tx_ref' => $txRef,
+                            'error' => $activationError->getMessage()
+                        ]);
+                    }
+                } elseif (!$transaction) {
+                    // No transaction record at all — still try to activate via meta in verification data
+                    try {
+                        $meta = [];
+                        if (isset($data['meta'])) {
+                            $meta = is_string($data['meta']) ? json_decode($data['meta'], true) : (array) $data['meta'];
+                        }
+                        $planId = $meta['plan_id'] ?? null;
+                        $userId = $meta['user_id'] ?? null;
+                        if ($planId && $userId) {
+                            $existingSub = \App\Models\Subscription::where('payment_transaction_id', $txRef)->first();
+                            if (!$existingSub) {
+                                $this->activatePlanForUser($userId, $planId, $txRef);
+                            }
+                        }
+                    } catch (\Exception $activationError) {
+                        Log::warning('Subscription activation (no-transaction path) failed', [
+                            'tx_ref' => $txRef,
+                            'error' => $activationError->getMessage()
+                        ]);
+                    }
                 }
 
                 return response()->json([
