@@ -22,6 +22,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'log.api' => \App\Http\Middleware\LogApiRequests::class,
             'validate.json' => \App\Http\Middleware\ValidateJsonRequest::class,
             'performance.monitor' => \App\Http\Middleware\PerformanceMonitor::class,
+            // Aliases from Kernel.php — must be duplicated here for Laravel 11 compatibility
+            'session.guard' => \App\Http\Middleware\EnsureSessionIsActive::class,
+            'process.queue' => \App\Http\Middleware\ProcessQueueJobs::class,
+            'admin.ip' => \App\Http\Middleware\AdminIpWhitelistMiddleware::class,
         ]);
 
         //
