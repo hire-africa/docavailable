@@ -28,6 +28,11 @@ Schedule::command('calls:cleanup-stale-connections')
     ->everyMinute()
     ->withoutOverlapping();
 
+// NEW: Server-side authoritative billing for active calls (auto deductions)
+Schedule::command('calls:process-active-call-billing')
+    ->everyMinute()
+    ->withoutOverlapping();
+
 // PRODUCTION-SAFE: Promote missed call connections (fallback for queue reliability)
 // Catches calls that missed the queue job due to queue being down
 Schedule::command('calls:promote-missed-connections')

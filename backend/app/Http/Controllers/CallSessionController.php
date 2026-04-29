@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Subscription;
 use App\Models\CallSession;
 use App\Jobs\PromoteCallToConnected;
+use App\Services\CallBillingService;
 use App\Services\SessionCreationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -1291,147 +1292,31 @@ class CallSessionController extends Controller
 
             $callType = $request->input('call_type');
             $appointmentId = $request->input('appointment_id');
-            $sessionDuration = $request->input('session_duration', 0);
-
-            return DB::transaction(function () use ($user, $callType, $appointmentId, $sessionDuration) {
-                // Find the call session - must have connected_at for billing
-                // Do NOT restrict by status - status might be 'connecting' but call is actually connected
-                $callSession = CallSession::where('appointment_id', $appointmentId)
-                    ->where('patient_id', $user->id)
-                    ->where('status', '!=', CallSession::STATUS_ENDED) // Only exclude ended
-                    ->lockForUpdate()
-                    ->first();
-
-                if (!$callSession) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'No active call session found'
-                    ], 404);
-                }
-
-                // CRITICAL: Only process billing if call is actually connected
-                // RACE-CONDITION SAFETY: If answered but connected_at missing, fix it now
-                if (!$callSession->connected_at) {
-                    if ($callSession->answered_at) {
-                        // Race condition: promotion job may have failed
-                        Log::warning("RACE CONDITION: Deduction attempted but connected_at missing despite answered - fixing now", [
-                            'call_session_id' => $callSession->id,
-                            'appointment_id' => $appointmentId,
-                            'answered_at' => $callSession->answered_at->toISOString()
-                        ]);
-
-                        // Fix race condition: use answered_at as connected_at
-                        $callSession->update([
-                            'is_connected' => true,
-                            'connected_at' => $callSession->answered_at,
-                            'status' => CallSession::STATUS_ACTIVE,
-                        ]);
-
-                        $callSession->refresh();
-
-                        Log::info("RACE CONDITION FIXED in deduction: Set connected_at to answered_at", [
-                            'call_session_id' => $callSession->id,
-                            'connected_at' => $callSession->connected_at->toISOString()
-                        ]);
-                    } else {
-                        // Call never answered - cannot bill
-                        Log::warning("Deduction attempted for unconnected call", [
-                            'call_session_id' => $callSession->id,
-                            'appointment_id' => $appointmentId
-                        ]);
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Call is not connected - cannot process billing'
-                        ], 400);
-                    }
-                }
-
-                // Calculate duration from timestamps only
-                $duration = $callSession->connected_at->diffInSeconds($callSession->ended_at ?? now());
-
-                // Calculate auto-deductions: every 10 minutes (600 seconds)
-                $autoDeductions = floor($duration / 600);
-                $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
-                $newDeductions = max(0, $autoDeductions - $alreadyProcessed);
-
-                // Manual deduction: +1 on manual hangup
-                $manualDeduction = $callSession->ended_at ? 1 : 0;
-
-                $deductionResult = [
-                    'deductions_processed' => 0,
-                    'remaining_calls' => 0,
-                    'auto_deductions' => $autoDeductions,
-                    'new_deductions' => $newDeductions,
-                    'manual_deduction' => $manualDeduction,
-                    'errors' => []
-                ];
-
-                // Only process if there are new deductions to make
-                if ($newDeductions > 0) {
-                    $patient = $user;
-                    // FIFO: get oldest active subscription with remaining calls
-                    $subscription = Subscription::getOldestActiveForDeduction($patient->id, $callType);
-
-                    if ($subscription) {
-                        $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-
-                        // Deduct new deductions from oldest subscription
-                        $subscription->$callTypeField = max(0, $subscription->$callTypeField - $newDeductions);
-                        $subscription->save();
-
-                        // Update call session
-                        $callSession->auto_deductions_processed = $autoDeductions;
-                        $callSession->sessions_used = ($callSession->sessions_used ?? 0) + $newDeductions;
-                        $callSession->save();
-
-                        // Pay the doctor for new deductions
-                        $doctor = User::find($callSession->doctor_id);
-                        if ($doctor) {
-                            $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
-                            $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $newDeductions;
-                            $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
-
-                            $doctorWallet->credit(
-                                $paymentAmount,
-                                "Auto-deduction payment for {$newDeductions} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
-                                $callType,
-                                $callSession->id,
-                                'call_sessions_auto',
-                                [
-                                    'patient_name' => $patient->first_name . " " . $patient->last_name,
-                                    'session_duration' => $duration,
-                                    'sessions_used' => $newDeductions,
-                                    'auto_deductions' => $newDeductions,
-                                    'currency' => $currency,
-                                    'payment_amount' => $paymentAmount,
-                                ]
-                            );
-                        }
-
-                        $deductionResult['deductions_processed'] = $newDeductions;
-                        $deductionResult['remaining_calls'] = $subscription->$callTypeField;
-                    } else {
-                        $deductionResult['errors'][] = 'No subscription with remaining calls found';
-                    }
-                }
-
-                Log::info("Call auto-deduction processed", [
-                    'user_id' => $user->id,
-                    'call_type' => $callType,
-                    'appointment_id' => $appointmentId,
-                    'duration_seconds' => $duration,
-                    'auto_deductions' => $autoDeductions,
-                    'new_deductions' => $newDeductions,
-                    'manual_deduction' => $manualDeduction,
-                    'deduction_result' => $deductionResult
-                ]);
-
+            if (!in_array($callType, ['voice', 'video'], true)) {
                 return response()->json([
-                    'success' => true,
-                    'message' => 'Call deduction processed successfully',
-                    'data' => $deductionResult
-                ]);
-            });
+                    'success' => false,
+                    'message' => 'Invalid call type. Must be voice or video'
+                ], 400);
+            }
+
+            if (empty($appointmentId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Appointment ID is required'
+                ], 400);
+            }
+
+            $billingService = new CallBillingService();
+            $result = $billingService->processAutoDeduction(
+                (string) $appointmentId,
+                (int) $user->id,
+                (string) $callType
+            );
+
+            $status = $result['status'] ?? ($result['success'] ? 200 : 500);
+            unset($result['status']);
+
+            return response()->json($result, $status);
 
         } catch (\Exception $e) {
             Log::error("Error processing call deduction", [

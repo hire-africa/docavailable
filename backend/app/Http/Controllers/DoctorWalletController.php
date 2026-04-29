@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DoctorWallet;
+use App\Models\DoctorPaymentMethod;
 use App\Models\WalletTransaction;
 use App\Models\WithdrawalRequest;
 use App\Services\DoctorPaymentService;
@@ -10,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 
 class DoctorWalletController extends Controller
@@ -37,7 +39,125 @@ class DoctorWalletController extends Controller
                 'total_earned' => $wallet->total_earned,
                 'total_withdrawn' => $wallet->total_withdrawn,
                 'payment_rates' => DoctorPaymentService::getPaymentAmountsForDoctor($user),
+                'payment_methods' => DoctorPaymentMethod::where('doctor_id', $user->id)
+                    ->orderByDesc('is_primary')
+                    ->orderByDesc('created_at')
+                    ->get(),
             ]
+        ]);
+    }
+
+    public function addPaymentMethod(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user->isDoctor()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only doctors can add payment methods'
+            ], 403);
+        }
+
+        $request->validate([
+            'current_password' => 'required|string',
+            'type' => 'required|in:bank_transfer,mobile_money',
+            'provider' => 'nullable|in:airtel_money,mpamba',
+            'label' => 'required|string|max:255',
+            'holder_name' => 'nullable|string|max:255',
+            'details' => 'required|array',
+        ]);
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Incorrect password'
+            ], 422);
+        }
+
+        if ($request->type === 'mobile_money') {
+            if (strtolower($user->country ?? '') !== 'malawi') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Mobile money is only available for Malawian doctors'
+                ], 400);
+            }
+
+            $request->validate([
+                'provider' => 'required|in:airtel_money,mpamba',
+                'details.mobile_number' => 'required|string|max:20',
+                'details.account_name' => 'required|string|max:255',
+            ]);
+        } else {
+            $request->validate([
+                'details.bank_name' => 'required|string|max:255',
+                'details.account_number' => 'required|string|max:255',
+                'details.account_name' => 'nullable|string|max:255',
+                'details.bank_branch' => 'nullable|string|max:255',
+            ]);
+        }
+
+        $hasPrimary = DoctorPaymentMethod::where('doctor_id', $user->id)->where('is_primary', true)->exists();
+
+        $method = DoctorPaymentMethod::create([
+            'doctor_id' => $user->id,
+            'type' => $request->type,
+            'provider' => $request->provider,
+            'label' => $request->label,
+            'holder_name' => $request->holder_name,
+            'details' => $request->details,
+            'is_primary' => !$hasPrimary,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment method added successfully',
+            'data' => $method,
+        ]);
+    }
+
+    public function deletePaymentMethod(Request $request, int $id): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user->isDoctor()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only doctors can remove payment methods'
+            ], 403);
+        }
+
+        $request->validate([
+            'current_password' => 'required|string',
+        ]);
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Incorrect password'
+            ], 422);
+        }
+
+        $method = DoctorPaymentMethod::where('doctor_id', $user->id)->where('id', $id)->first();
+        if (!$method) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment method not found'
+            ], 404);
+        }
+
+        $wasPrimary = (bool) $method->is_primary;
+        $method->delete();
+
+        if ($wasPrimary) {
+            $next = DoctorPaymentMethod::where('doctor_id', $user->id)->orderByDesc('created_at')->first();
+            if ($next) {
+                $next->update(['is_primary' => true]);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment method removed successfully'
         ]);
     }
 
@@ -158,10 +278,18 @@ class DoctorWalletController extends Controller
         }
 
         $request->validate([
-            'amount' => 'required|numeric|min:1000|max:1000000', // Min 1000, Max 1M
+            'amount' => 'required|numeric|max:1000000', // Max 1M
             'payment_method' => 'required|in:bank_transfer,mobile_money',
             'payment_details' => 'required|array',
         ]);
+
+        $minimumAmount = strtolower($user->country ?? '') === 'malawi' ? 50000 : 70;
+        if ((float) $request->amount < $minimumAmount) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Minimum payout is ' . $minimumAmount . ' for your account currency.'
+            ], 422);
+        }
 
         // Validate payment details based on method
         if ($request->payment_method === 'bank_transfer') {

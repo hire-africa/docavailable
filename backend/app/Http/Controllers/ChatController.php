@@ -341,8 +341,55 @@ class ChatController extends Controller
                     ], 403);
                 }
 
+                // Lazy migration: If session doesn't have a chat_id, try to find/create one and unify messages
+                if (empty($textSession->chat_id)) {
+                    try {
+                        $chatRoomId = DB::table('chat_rooms as cr')
+                            ->join('chat_room_participants as p1', 'cr.id', '=', 'p1.chat_room_id')
+                            ->join('chat_room_participants as p2', 'cr.id', '=', 'p2.chat_room_id')
+                            ->where('cr.type', 'private')
+                            ->where('p1.user_id', $textSession->patient_id)
+                            ->where('p2.user_id', $textSession->doctor_id)
+                            ->value('cr.id');
+
+                        if ($chatRoomId) {
+                            // Link session to existing chat room
+                            DB::table('text_sessions')->where('id', $textSession->id)->update(['chat_id' => $chatRoomId]);
+                            // Move existing messages to the unified room ID
+                            DB::table('chat_messages')->where('appointment_id', $textSession->id)->update(['appointment_id' => $chatRoomId]);
+                            $textSession->chat_id = $chatRoomId;
+                            Log::info("Lazy unified text session messages to existing room", ['session_id' => $textSession->id, 'chat_room_id' => $chatRoomId]);
+                        } else {
+                            // If no private room exists, the next session will create one. 
+                            // For now, we can just use the current session ID as the temporary unified ID 
+                            // but it's better to create the private room now to start the unification.
+                            $chatRoomId = DB::table('chat_rooms')->insertGetId([
+                                'name' => "Chat",
+                                'type' => 'private',
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+
+                            DB::table('chat_room_participants')->insert([
+                                ['chat_room_id' => $chatRoomId, 'user_id' => $textSession->patient_id, 'role' => 'member', 'created_at' => now(), 'updated_at' => now()],
+                                ['chat_room_id' => $chatRoomId, 'user_id' => $textSession->doctor_id, 'role' => 'member', 'created_at' => now(), 'updated_at' => now()],
+                            ]);
+
+                            DB::table('text_sessions')->where('id', $textSession->id)->update(['chat_id' => $chatRoomId]);
+                            DB::table('chat_messages')->where('appointment_id', $textSession->id)->update(['appointment_id' => $chatRoomId]);
+                            $textSession->chat_id = $chatRoomId;
+                            Log::info("Lazy created new private room and unified messages", ['session_id' => $textSession->id, 'chat_room_id' => $chatRoomId]);
+                        }
+                    } catch (\Exception $e) {
+                        Log::error("Failed lazy chat unification", ['session_id' => $textSession->id, 'error' => $e->getMessage()]);
+                    }
+                }
+
+                // Use persistent chat_id if available to show full history
+                $identifier = !empty($textSession->chat_id) ? (int) $textSession->chat_id : $actualId;
+
                 // Get messages from cache storage
-                $messages = $this->messageStorageService->getMessages($actualId, 'text_session');
+                $messages = $this->messageStorageService->getMessages($identifier, 'text_session');
 
                 // Apply anonymization if needed
                 $messages = $this->applyAnonymizationToMessages($messages, $user, $textSession);
@@ -738,11 +785,21 @@ class ChatController extends Controller
         // Use numeric ID for MessageStorageService methods
         // Determine session type: use 'text_session' for text sessions, 'appointment' for appointments
         $sessionType = ($isTextSession || isset($textSession)) ? 'text_session' : 'appointment';
-        $message = $this->messageStorageService->storeMessage($actualId, $messageData, $sessionType);
+        // Determine identifier: use persistent chat_id if available for text sessions
+        $identifier = $actualId;
+        if ($sessionType === 'text_session') {
+            if (isset($session) && !empty($session->chat_id)) {
+                $identifier = (int) $session->chat_id;
+            } elseif (isset($textSession) && !empty($textSession->chat_id)) {
+                $identifier = (int) $textSession->chat_id;
+            }
+        }
+
+        $message = $this->messageStorageService->storeMessage($identifier, $messageData, $sessionType);
 
         // Update chat room keys for tracking
         // Use numeric ID for MessageStorageService methods
-        $this->messageStorageService->updateChatRoomKeys($actualId, $sessionType);
+        $this->messageStorageService->updateChatRoomKeys($identifier, $sessionType);
 
         // Text session message notification
         if (isset($session) && $session) {

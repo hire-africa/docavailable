@@ -262,6 +262,14 @@ class User extends Authenticatable implements JWTSubject
     }
 
     /**
+     * Get auth device sessions for this user.
+     */
+    public function sessions()
+    {
+        return $this->hasMany(UserSession::class)->orderByDesc('last_seen_at');
+    }
+
+    /**
      * Get user's notification preferences.
      */
     public function notificationPreferences()

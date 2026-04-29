@@ -75,25 +75,31 @@ class PaymentController extends Controller
 
             Log::info('Webhook signature verified successfully');
 
-            // Step 2: Parse webhook data
+            // Step 2: Parse webhook data flexibly
             $data = $request->all();
-            Log::info('Webhook payload parsed', ['data' => $data]);
+            Log::info('Webhook payload received', ['data' => $data]);
 
-            // Step 3: Check event type (Paychangu specific)
-            if (!isset($data['event_type'])) {
-                Log::error('Missing event_type in webhook payload', ['data' => $data]);
-                return response()->json(['error' => 'Missing event_type'], 200);
-            }
-            // Normalize event type to avoid casing/spacing issues
-            $event = strtolower(trim($data['event_type']));
-            $allowedEventTypes = ['api.charge.payment', 'checkout.payment'];
+            // FLEXIBLE EVENT TYPE CHECKING
+            $eventType = $data['event_type'] ?? $data['event'] ?? 'unknown';
+            $event = strtolower(trim($eventType));
+            $allowedEventTypes = ['api.charge.payment', 'checkout.payment', 'payment.success', 'charge.success', 'transaction.completed'];
+            
             if (!in_array($event, $allowedEventTypes, true)) {
-                Log::info('Unsupported event type', ['event_type' => $data['event_type']]);
+                Log::info('Unsupported event type', ['event_type' => $eventType]);
                 return response()->json(['message' => 'Event type not supported'], 200);
             }
             $data['event_type'] = $event;
 
-            // Step 4: Parse meta data (Paychangu sends this as JSON string)
+            // FLEXIBLE STATUS CHECKING
+            $status = strtolower($data['status'] ?? $data['data']['status'] ?? 'failed');
+            $successStatuses = ['success', 'successful', 'completed', 'paid'];
+            
+            if (!in_array($status, $successStatuses)) {
+                Log::info('Payment status not success', ['status' => $status]);
+                return response()->json(['message' => 'Payment status not success'], 200);
+            }
+
+            // Step 4: Parse meta data flexibly (Payload can be string or object)
             $meta = [];
             if (isset($data['meta'])) {
                 if (is_string($data['meta'])) {
@@ -103,15 +109,21 @@ class PaymentController extends Controller
                 }
             }
 
-            Log::info('Parsed meta data', ['meta' => $meta]);
+            // Check for user_id and plan_id in meta OR at top level
+            $userId = $meta['user_id'] ?? $data['user_id'] ?? $data['data']['user_id'] ?? null;
+            $planId = $meta['plan_id'] ?? $data['plan_id'] ?? $data['data']['plan_id'] ?? null;
 
-            if (empty($meta['user_id'])) {
-                Log::error('Payment webhook missing user_id in meta', ['data' => $data, 'meta' => $meta]);
-                return response()->json(['error' => 'Missing user_id in meta data'], 200);
+            if (!$userId) {
+                Log::error('Payment webhook missing user_id', ['data' => $data, 'meta' => $meta]);
+                return response()->json(['error' => 'Missing user_id'], 200);
             }
 
+            // Sync meta for processSuccessfulPayment
+            $meta['user_id'] = $userId;
+            if ($planId) $meta['plan_id'] = $planId;
+
             // Step 5: Check payment status
-            if ($data['status'] === 'success') {
+            if (in_array($status, $successStatuses)) {
                 // Step 6: ALWAYS RE-QUERY - Verify with PayChangu API before processing
                 // Prefer tx_ref when available per PayChangu docs
                 $transactionId = $data['tx_ref'] ?? $data['charge_id'] ?? $data['reference'] ?? null;
@@ -160,8 +172,8 @@ class PaymentController extends Controller
             $amount = $data['amount'];
             $currency = $data['currency'];
 
-            // Use correct Paychangu transaction ID fields
-            $transactionId = $data['tx_ref'] ?? $data['charge_id'] ?? $data['reference'] ?? null;
+            // Use correct Paychangu transaction ID fields (Flexible)
+            $transactionId = $data['tx_ref'] ?? $data['charge_id'] ?? $data['reference'] ?? $data['data']['id'] ?? $data['data']['tx_ref'] ?? null;
 
             if (!$transactionId) {
                 Log::error('Missing transaction ID in Paychangu webhook', ['data' => $data]);
@@ -543,19 +555,23 @@ class PaymentController extends Controller
     }
 
     /**
-     * Common helper to render the HTML redirect page for WebView
+     * Common helper to render the HTML redirect page for WebView / iframe.
+     *
+     * Signal priority:
+     *   1. window.ReactNativeWebView.postMessage — native mobile WebView
+     *   2. window.parent.postMessage             — web iframe (CheckoutWebViewModal on web)
+     *   3. window.location.href redirect         — standalone browser tab fallback
      */
     private function renderRedirectPage($transaction, $txRef, $status)
     {
         $final_status = $transaction ? $transaction->status : $status;
-        // Frontend URL for browser redirect after payment (must be a valid absolute URL)
-        $frontendUrl = rtrim((string) config('app.frontend_url', 'https://docavailable.com'), '/');
+        // Frontend URL for standalone-tab browser redirect fallback
+        $frontendUrl = rtrim((string) config('app.frontend_url', 'https://docavailable1-izk3m.ondigitalocean.app'), '/');
         if (!preg_match('#^https?://#i', $frontendUrl)) {
-            $frontendUrl = 'https://docavailable.com';
+            $frontendUrl = 'https://docavailable1-izk3m.ondigitalocean.app';
         }
         $redirectUrl = $frontendUrl . '/?payment_status=' . urlencode($final_status) . '&tx_ref=' . urlencode($txRef);
 
-        // Return a invisible, instant redirect page
         $html = '<!DOCTYPE html>
 <html>
 <head>
@@ -569,33 +585,32 @@ class PaymentController extends Controller
     </div>
     <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
     <script>
-        function doRedirect() {
-            // 1. Signal WebView via postMessage (Primary closure mechanism)
-            if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: "close_window",
-                    status: "' . $final_status . '",
-                    tx_ref: "' . $txRef . '"
-                }));
-            } else {
-                // 2. Browser/tab fallback: redirect back to main app URL
-                // This handles flows where checkout was opened in a new tab or external browser.
-                setTimeout(function() {
-                    window.location.href = ' . json_encode($redirectUrl) . ';
-                }, 1500);
-            }
-        }
+        (function () {
+            var msg = JSON.stringify({
+                type: "close_window",
+                status: "' . $final_status . '",
+                tx_ref: "' . $txRef . '"
+            });
 
-        // Execute closure signal immediately
-        doRedirect();
-        
-        // Manual fallback for deep link if needed
-        function manualDeepLink() {
-            const deepLink = "com.docavailable.app://payment-result?status=" + 
-                encodeURIComponent("' . $final_status . '") + 
-                "&tx_ref=" + encodeURIComponent("' . $txRef . '");
-            window.location.href = deepLink;
-        }
+            // 1. Native React Native WebView (mobile app)
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(msg);
+                return;
+            }
+
+            // 2. Web iframe — signal the parent React app via postMessage.
+            //    CheckoutWebViewModal listens via window.addEventListener("message", ...)
+            //    and calls onPaymentDetected() which closes the modal cleanly.
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage(msg, "*");
+                return;
+            }
+
+            // 3. Standalone browser tab fallback: navigate back to the app with status params.
+            setTimeout(function () {
+                window.location.href = ' . json_encode($redirectUrl) . ';
+            }, 1500);
+        })();
     </script>
 </body>
 </html>';
@@ -617,13 +632,13 @@ class PaymentController extends Controller
 
             Log::info('Payment status check requested', ['tx_ref' => $txRef]);
 
-            // STEP 1: Check DigitalOcean database FIRST (webhook may have already marked it completed)
+            // STEP 1: Check database first — webhook may have already marked it completed
             $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
                 ->orWhere('gateway_reference', $txRef)
                 ->first();
 
             if ($transaction && $transaction->status === 'completed') {
-                Log::info('Payment already confirmed in database', ['tx_ref' => $txRef, 'status' => $transaction->status]);
+                Log::info('Payment confirmed in database', ['tx_ref' => $txRef]);
                 return response()->json([
                     'success' => true,
                     'message' => 'Payment verified from database',
@@ -637,44 +652,94 @@ class PaymentController extends Controller
                 ]);
             }
 
-            // STEP 2: Fallback to PayChangu verify API (for fresh transactions not yet processed by webhook)
-            Log::info('Transaction not yet completed in database, checking PayChangu API', ['tx_ref' => $txRef]);
+            // STEP 2: Transaction pending or not in DB — verify directly with PayChangu.
+            // We cannot rely solely on the webhook (it may be delayed or misconfigured).
+            // PayChangu returns a non-2xx / error body for genuinely unpaid tx_refs, so
+            // we treat any failed verification as "still pending" rather than a hard error.
+            Log::info('Checking PayChangu API for transaction status', ['tx_ref' => $txRef]);
             $payChanguService = new \App\Services\PayChanguService();
             $verification = $payChanguService->verify($txRef);
 
             if (!$verification['ok']) {
+                Log::info('PayChangu verify returned not-ok (payment likely not completed yet)', [
+                    'tx_ref' => $txRef,
+                    'error' => $verification['error'] ?? null
+                ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'Payment verification failed',
-                    'error' => $verification['error'] ?? 'Unknown error'
-                ], 400);
+                    'message' => 'Payment pending',
+                    'data' => ['status' => 'pending', 'tx_ref' => $txRef]
+                ]);
             }
 
             $data = $verification['data'];
 
-            // Verify critical fields as per PayChangu documentation
             if (!$data || !isset($data['status'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid verification response'
-                ], 400);
+                    'message' => 'Payment pending',
+                    'data' => ['status' => 'pending', 'tx_ref' => $txRef]
+                ]);
             }
 
-            // Check if payment is successful
             if ($data['status'] === 'success') {
-                // Find our transaction record
-                $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
-                    ->orWhere('gateway_reference', $txRef)
-                    ->first();
-
+                // Mark transaction completed in DB
                 if ($transaction) {
                     $transaction->update([
                         'status' => 'completed',
                         'metadata' => array_merge($transaction->metadata ?? [], [
-                            'verification_response' => $verification['body'],
+                            'verification_response' => $verification['body'] ?? $data,
                             'verified_at' => now()->toISOString()
                         ])
                     ]);
+                }
+
+                // Activate subscription if not already done (webhook may not have fired)
+                if ($transaction && $transaction->status !== 'completed') {
+                    try {
+                        $meta = $transaction->metadata ?? [];
+                        $planId = $meta['plan_id'] ?? null;
+                        $userId = $transaction->user_id;
+
+                        if ($planId && $userId) {
+                            // Check if subscription was already activated for this transaction
+                            $existingSub = \App\Models\Subscription::where('payment_transaction_id', $txRef)->first();
+                            if (!$existingSub) {
+                                Log::info('Activating subscription via status poll (webhook fallback)', [
+                                    'tx_ref' => $txRef,
+                                    'user_id' => $userId,
+                                    'plan_id' => $planId,
+                                ]);
+                                $this->activatePlanForUser($userId, $planId, $txRef);
+                            }
+                        }
+                    } catch (\Exception $activationError) {
+                        Log::warning('Subscription activation during status poll failed (may already exist)', [
+                            'tx_ref' => $txRef,
+                            'error' => $activationError->getMessage()
+                        ]);
+                    }
+                } elseif (!$transaction) {
+                    // No transaction record at all — still try to activate via meta in verification data
+                    try {
+                        $meta = [];
+                        if (isset($data['meta'])) {
+                            $meta = is_string($data['meta']) ? json_decode($data['meta'], true) : (array) $data['meta'];
+                        }
+                        $planId = $meta['plan_id'] ?? null;
+                        $userId = $meta['user_id'] ?? null;
+                        if ($planId && $userId) {
+                            $existingSub = \App\Models\Subscription::where('payment_transaction_id', $txRef)->first();
+                            if (!$existingSub) {
+                                $this->activatePlanForUser($userId, $planId, $txRef);
+                            }
+                        }
+                    } catch (\Exception $activationError) {
+                        Log::warning('Subscription activation (no-transaction path) failed', [
+                            'tx_ref' => $txRef,
+                            'error' => $activationError->getMessage()
+                        ]);
+                    }
                 }
 
                 return response()->json([
@@ -682,22 +747,22 @@ class PaymentController extends Controller
                     'message' => 'Payment verified successfully',
                     'data' => [
                         'status' => $data['status'],
-                        'amount' => $data['amount'],
-                        'currency' => $data['currency'],
-                        'tx_ref' => $data['tx_ref'],
-                        'reference' => $data['reference'],
+                        'amount' => $data['amount'] ?? null,
+                        'currency' => $data['currency'] ?? null,
+                        'tx_ref' => $data['tx_ref'] ?? $txRef,
+                        'reference' => $data['reference'] ?? null,
                         'transaction_id' => $transaction->id ?? null
                     ]
                 ]);
             } else {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Payment not successful',
+                    'message' => 'Payment not yet completed',
                     'data' => [
                         'status' => $data['status'],
                         'tx_ref' => $data['tx_ref'] ?? $txRef
                     ]
-                ], 400);
+                ]);
             }
 
         } catch (\Exception $e) {

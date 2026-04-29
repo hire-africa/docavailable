@@ -617,7 +617,8 @@ class FileUploadController extends Controller
 
         try {
             $request->validate([
-                'file' => 'required|file|mimes:m4a,mp3,wav,aac,mp4|max:10240', // max 10MB for audio files, added mp4
+                // Web (expo-av) often records as webm (audio/webm).
+                'file' => 'required|file|mimes:m4a,mp3,wav,aac,mp4,webm|max:10240', // max 10MB for audio files
                 'appointment_id' => 'required'
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {

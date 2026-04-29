@@ -19,6 +19,10 @@ class RoleMiddleware
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
+        if ($role === 'admin') {
+            return response()->json(['message' => 'Admin console disabled.'], 403);
+        }
+
         if (!$request->user()->hasRole($role)) {
             return response()->json(['message' => 'Access denied. Insufficient permissions.'], 403);
         }
