@@ -32,6 +32,7 @@ export default function LoginPage() {
     const [phone, setPhone] = useState('');
     const [countryCode, setCountryCode] = useState<CountryCode>(getDefaultCountryCode());
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [showGoogleAuth, setShowGoogleAuth] = useState(false);
     const { userType } = useLocalSearchParams<{ userType?: string }>();
@@ -378,13 +379,23 @@ export default function LoginPage() {
                                 placeholderTextColor="#666"
                                 value={password}
                                 onChangeText={setPassword}
-                                secureTextEntry
+                                secureTextEntry={!showPassword}
                                 autoCapitalize="none"
                                 autoCorrect={false}
                                 cursorColor="#4CAF50"
                                 caretHidden={false}
                                 selectionColor="#4CAF50"
                             />
+                            <TouchableOpacity
+                                style={styles.eyeButton}
+                                onPress={() => setShowPassword(!showPassword)}
+                            >
+                                <FontAwesome
+                                    name={showPassword ? "eye-slash" : "eye"}
+                                    size={20}
+                                    color="#666"
+                                />
+                            </TouchableOpacity>
                         </View>
 
                         <TouchableOpacity
@@ -530,6 +541,9 @@ const styles = StyleSheet.create({
                 textAlignVertical: 'center',
             },
         }),
+    },
+    eyeButton: {
+        padding: 10,
     },
     loginButton: {
         backgroundColor: '#4CAF50',

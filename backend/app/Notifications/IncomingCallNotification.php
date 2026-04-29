@@ -60,7 +60,7 @@ class IncomingCallNotification extends Notification
             'android' => [
                 'priority' => 'high', // Ensures immediate delivery
                 'notification' => [
-                    'channel_id' => 'calls',
+                    'channel_id' => 'incoming_calls_v3',
                     'sound' => 'ringtone',
                     'default_sound' => false,
                 ],

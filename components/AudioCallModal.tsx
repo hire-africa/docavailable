@@ -1,11 +1,11 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import AudioCall from './AudioCall';
 
@@ -21,7 +21,7 @@ interface AudioCallModalProps {
   otherParticipantProfilePictureUrl?: string;
   isIncomingCall?: boolean;
   onCallTimeout?: () => void;
-  onCallRejected?: () => void;
+  onCallRejected?: (rejectedBy?: string) => void;
 }
 
 export default function AudioCallModal({
@@ -56,7 +56,7 @@ export default function AudioCallModal({
   // Auto-start the outgoing call as soon as this modal becomes visible
   useEffect(() => {
     console.log('🎤 [AudioCallModal] useEffect triggered:', { visible, isIncomingCall, showAudioCall });
-    
+
     if (visible && !isIncomingCall) {
       console.log('📞 [AudioCallModal] Starting outgoing call...');
       setShowAudioCall(true);
@@ -81,9 +81,9 @@ export default function AudioCallModal({
     onCallTimeout?.();
   };
 
-  const handleCallRejected = () => {
+  const handleCallRejected = (rejectedBy?: string) => {
     setShowAudioCall(false);
-    onCallRejected?.();
+    onCallRejected?.(rejectedBy);
   };
 
   // For incoming calls, skip the modal and go directly to AudioCall
@@ -157,11 +157,11 @@ export default function AudioCallModal({
             <View style={styles.iconContainer}>
               <FontAwesome name="phone" size={48} color="#4CAF50" />
             </View>
-            
+
             <Text style={styles.description}>
               Connecting to {isDoctor ? patientName : doctorName}
             </Text>
-            
+
             <Text style={styles.note}>
               Please wait while we initialize the call...
             </Text>

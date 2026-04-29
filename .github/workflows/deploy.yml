@@ -14,5 +14,5 @@ jobs:
       - name: Deploy to DigitalOcean
         uses: digitalocean/app_action@v1
         with:
-          app_name: docavailable
+          app_name: docavailable1
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}

@@ -8,6 +8,7 @@ export interface UseInstantSessionDetectorOptions {
   doctorId: number;
   authToken: string;
   enabled?: boolean;
+  passive?: boolean;
 }
 
 export interface UseInstantSessionDetectorReturn {
@@ -26,6 +27,8 @@ export interface UseInstantSessionDetectorReturn {
   triggerDoctorMessageDetection: (message: any) => void;
   forceStateSync: () => void;
   updateAuthToken: (newAuthToken: string) => void;
+  setPassiveMode: (passive: boolean) => void;
+  handleExternalMessage: (data: any) => void;
 }
 
 export function useInstantSessionDetector(options: UseInstantSessionDetectorOptions): UseInstantSessionDetectorReturn {
@@ -35,12 +38,13 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     patientId,
     doctorId,
     authToken,
-    enabled = true
+    enabled = true,
+    passive = false
   } = options;
 
   useEffect(() => {
-    console.log('🔧 [Hook] useInstantSessionDetector called with:', { sessionId, appointmentId, patientId, doctorId, enabled, hasAuthToken: !!authToken });
-  }, [sessionId, appointmentId, patientId, doctorId, enabled, !!authToken]);
+    console.log('🔧 [Hook] useInstantSessionDetector called with:', { sessionId, appointmentId, patientId, doctorId, enabled, passive, hasAuthToken: !!authToken });
+  }, [sessionId, appointmentId, patientId, doctorId, enabled, passive, !!authToken]);
 
   const [isConnected, setIsConnected] = useState(false);
   const [timerState, setTimerState] = useState<TimerState>({
@@ -142,11 +146,17 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       map.set(sessionId, detectorRef.current);
     }
 
+    // Apply passive mode immediately
+    if (detectorRef.current) {
+      detectorRef.current.setPassiveMode(passive);
+    }
+
     // Seed local state from detector if available
     if (detectorRef.current) {
       setHasPatientSentMessage(detectorRef.current.hasPatientSentMessage());
       setHasDoctorResponded(detectorRef.current.hasDoctorRespondedToMessage());
       setIsSessionActivated(detectorRef.current.isSessionActivated());
+      setIsSessionExpired(detectorRef.current.isSessionExpired());
       setTimerState(detectorRef.current.getTimerState());
     }
 
@@ -182,6 +192,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       setHasPatientSentMessage(detectorRef.current.hasPatientSentMessage());
       setHasDoctorResponded(detectorRef.current.hasDoctorRespondedToMessage());
       setIsSessionActivated(detectorRef.current.isSessionActivated());
+      setIsSessionExpired(detectorRef.current.isSessionExpired());
       setTimerState(detectorRef.current.getTimerState());
 
       // Force state sync to ensure hook state matches detector state
@@ -191,7 +202,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       // Immediately rehydrate timer from backend after successful connect to avoid race conditions
       try {
         const { apiService } = await import('../services/apiService');
-        const result = await apiService.get(`/text-sessions/${sessionId}/check-response`);
+        const result = await apiService.get(`/text-sessions/${sessionId}/check-response`) as any;
         if (result?.success && result?.status === 'waiting' && typeof result?.timeRemaining === 'number' && result?.doctor_response_deadline) {
           const remaining = Math.max(0, Math.floor(result.timeRemaining));
           if (remaining > 0) {
@@ -221,7 +232,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
 
         // Import lazily to avoid cycles
         const { apiService } = await import('../services/apiService');
-        const result = await apiService.get(`/text-sessions/${sessionId}/check-response`);
+        const result = await apiService.get(`/text-sessions/${sessionId}/check-response`) as any;
         if (cancelled) return;
 
         if (result?.success && result?.status === 'waiting' && typeof result?.timeRemaining === 'number' && result?.doctor_response_deadline) {
@@ -300,6 +311,20 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
   const forceStateSync = (): void => {
     if (detectorRef.current) {
       detectorRef.current.forceStateSync();
+      // Also sync isSessionExpired state directly in the hook
+      setIsSessionExpired(detectorRef.current.isSessionExpired());
+    }
+  };
+
+  const setPassiveMode = (passive: boolean): void => {
+    if (detectorRef.current) {
+      detectorRef.current.setPassiveMode(passive);
+    }
+  };
+
+  const handleExternalMessage = (data: any): void => {
+    if (detectorRef.current) {
+      detectorRef.current.handleExternalMessage(data);
     }
   };
 
@@ -318,6 +343,8 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     triggerPatientMessageDetection,
     triggerDoctorMessageDetection,
     forceStateSync,
-    updateAuthToken
+    updateAuthToken,
+    setPassiveMode,
+    handleExternalMessage
   };
 }

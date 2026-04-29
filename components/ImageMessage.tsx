@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useEffect } from 'react';
-import { ActivityIndicator, Dimensions, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { environment } from '../config/environment';
-import { signedUrlService } from '../services/signedUrlService';
 import ReadReceipt from './ReadReceipt';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -19,9 +18,9 @@ interface ImageMessageProps {
   appointmentId?: string;
 }
 
-export default function ImageMessage({ 
-  imageUrl, 
-  isOwnMessage = false, 
+export default function ImageMessage({
+  imageUrl,
+  isOwnMessage = false,
   timestamp,
   deliveryStatus = 'sent',
   profilePictureUrl,
@@ -32,13 +31,13 @@ export default function ImageMessage({
 }: ImageMessageProps) {
   // Debug: Log the image URL we receive
   console.log('🖼️ ImageMessage received imageUrl:', imageUrl);
-  
+
   // Debug profile picture URL
-      // console.log('ImageMessage Debug:', {
-    //   profilePictureUrl,
-    //   isOwnMessage,
-    //   hasUrl: !!profilePictureUrl
-    // });
+  // console.log('ImageMessage Debug:', {
+  //   profilePictureUrl,
+  //   isOwnMessage,
+  //   hasUrl: !!profilePictureUrl
+  // });
 
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
@@ -79,28 +78,28 @@ export default function ImageMessage({
       Image.getSize(
         currentImageUrl,
         (width, height) => {
-          // Max width for chat bubble (80% of screen or 300px)
-          const maxWidth = Math.min(screenWidth * 0.7, 300);
-          const maxHeight = 400;
-          
+          // Max width for chat bubble (75% of screen or 400px)
+          const maxWidth = Math.min(screenWidth * 0.75, 400);
+          const maxHeight = 500;
+
           // Calculate aspect ratio
           const aspectRatio = width / height;
-          
+
           let finalWidth = width;
           let finalHeight = height;
-          
+
           // Scale down if too wide
           if (width > maxWidth) {
             finalWidth = maxWidth;
             finalHeight = maxWidth / aspectRatio;
           }
-          
+
           // Scale down if too tall
           if (finalHeight > maxHeight) {
             finalHeight = maxHeight;
             finalWidth = maxHeight * aspectRatio;
           }
-          
+
           setImageDimensions({ width: finalWidth, height: finalHeight });
         },
         (error) => {
@@ -124,13 +123,13 @@ export default function ImageMessage({
   const handleImageError = (error: any) => {
     console.error('🖼️ ImageMessage: Image load error:', error);
     console.error('🖼️ ImageMessage: Failed URL:', currentImageUrl);
-    
+
     // Try fallback URLs if we haven't exceeded retry limit
     if (retryCount < 3) {
       console.log(`🔄 ImageMessage: Trying fallback URL (attempt ${retryCount + 1}/3)`);
-      
+
       let fallbackUrl: string;
-      
+
       if (retryCount === 0) {
         // First retry: try HTTPS if HTTP failed
         if (currentImageUrl.startsWith('http://')) {
@@ -162,7 +161,7 @@ export default function ImageMessage({
           fallbackUrl = `${environment.LARAVEL_API_URL}/uploads/chat_images/${filename}`;
         }
       }
-      
+
       console.log('🔄 ImageMessage: Fallback URL:', fallbackUrl);
       setCurrentImageUrl(fallbackUrl);
       setRetryCount(retryCount + 1);
@@ -178,35 +177,41 @@ export default function ImageMessage({
 
   return (
     <>
-      <View style={[styles.container, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
-        {/* Profile Picture */}
-        <View style={styles.profilePictureContainer}>
-                   {profilePictureUrl ? (
-           <Image
-             source={{ uri: profilePictureUrl }}
-             style={styles.profilePicture}
-             onError={() => {
-               // console.log('ImageMessage: Profile picture failed to load, showing fallback');
-             }}
-             onLoad={() => {
-               // console.log('ImageMessage: Profile picture loaded successfully:', profilePictureUrl);
-             }}
-           />
-         ) : (
-            <View style={styles.profilePictureFallback}>
-              <Ionicons name="person" size={16} color={isOwnMessage ? "#fff" : "#666"} />
-            </View>
-          )}
-        </View>
+      <View style={[
+        styles.container,
+        isOwnMessage ? styles.ownMessage : styles.otherMessage,
+        { flexDirection: isOwnMessage ? 'row-reverse' : 'row' }
+      ]}>
+        {/* Profile Picture - Only show for others */}
+        {!isOwnMessage && (
+          <View style={styles.profilePictureContainer}>
+            {profilePictureUrl ? (
+              <Image
+                source={{ uri: profilePictureUrl }}
+                style={styles.profilePicture}
+                onError={() => {
+                  // console.log('ImageMessage: Profile picture failed to load, showing fallback');
+                }}
+                onLoad={() => {
+                  // console.log('ImageMessage: Profile picture loaded successfully:', profilePictureUrl);
+                }}
+              />
+            ) : (
+              <View style={styles.profilePictureFallback}>
+                <Ionicons name="person" size={16} color="#666" />
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Image Container */}
-        <View style={styles.imageContainer}>
+        <View style={[styles.imageContainer, { alignSelf: isOwnMessage ? 'flex-end' : 'flex-start' }]}>
           {imageLoading && (
             <View style={[styles.loadingContainer, { width: imageDimensions.width, height: imageDimensions.height }]}>
               <ActivityIndicator size="small" color={isOwnMessage ? "#fff" : "#4CAF50"} />
             </View>
           )}
-          
+
           {imageError ? (
             <View style={[styles.errorContainer, { width: imageDimensions.width, height: imageDimensions.height }]}>
               <Ionicons name="image-outline" size={24} color={isOwnMessage ? "#fff" : "#666"} />
@@ -223,7 +228,7 @@ export default function ImageMessage({
                 onError={handleImageError}
                 resizeMode="contain"
               />
-              
+
               {/* Upload status overlay */}
               {(deliveryStatus === 'sending' || fetchingSignedUrl) && (
                 <View style={styles.uploadingOverlay}>
@@ -233,7 +238,7 @@ export default function ImageMessage({
                   </Text>
                 </View>
               )}
-              
+
               {deliveryStatus === 'failed' && (
                 <View style={styles.failedOverlay}>
                   <Ionicons name="warning" size={16} color="#fff" />
@@ -277,7 +282,7 @@ export default function ImageMessage({
               <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
-          
+
           <TouchableOpacity
             style={styles.modalImageContainer}
             onPress={() => setImageModalVisible(false)}
@@ -302,7 +307,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 8,
     maxWidth: '85%',
-    minHeight: 70,
+    minHeight: 50,
   },
   ownMessage: {
     alignSelf: 'flex-end',
@@ -311,7 +316,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   profilePictureContainer: {
-    marginRight: 8,
+    marginHorizontal: 4,
   },
   profilePicture: {
     width: 32,
@@ -327,7 +332,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   imageContainer: {
-    flex: 1,
     position: 'relative',
   },
   image: {

@@ -39,4 +39,5 @@ export interface ChatEvents {
   onMessage: (message: ChatMessage) => void;
   onError: (error: string) => void;
   onSessionEnded?: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment' | 'text_session') => void;
+  onDetectorMessage?: (data: any) => void;
 }

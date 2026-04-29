@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import CustomAlertDialog from '../components/CustomAlertDialog';
 import DirectBookingModal from '../components/DirectBookingModal';
 import SessionTypeSelectionModal, { SessionType } from '../components/SessionTypeSelectionModal';
 import { environment } from '../config/environment';
@@ -41,6 +42,7 @@ interface Doctor {
   years_of_experience: number;
   professional_bio: string;
   last_online_at: string;
+  is_available_now?: boolean;
 }
 
 interface SessionInfo {
@@ -87,6 +89,7 @@ export default function InstantSessionsScreen() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedSessionType, setSelectedSessionType] = useState<SessionType>('text');
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [showBusyModal, setShowBusyModal] = useState(false);
 
   const fetchAvailableDoctors = async () => {
     try {
@@ -153,6 +156,10 @@ export default function InstantSessionsScreen() {
   };
 
   const handleStartSession = (doctor: Doctor) => {
+    if (!doctor?.is_available_now) {
+      Alert.alert('Not Available', 'This doctor is not available right now. Please try another doctor or check back later.');
+      return;
+    }
     setSelectedDoctor(doctor);
     setShowSessionTypeModal(true);
   };
@@ -199,8 +206,16 @@ export default function InstantSessionsScreen() {
 
       if (!result.success) {
         // Handle error - preserve existing error handling behavior
-        console.error('❌ [InstantSessions] Session creation failed:', result.message);
-        Alert.alert('Error', result.message || 'Failed to start session');
+        const msg = ('message' in result && (result as any).message)
+          ? String((result as any).message)
+          : 'Failed to start session';
+        console.error('❌ [InstantSessions] Session creation failed:', msg);
+
+        if (msg.includes('Doctor is currently in another session')) {
+          setShowBusyModal(true);
+        } else {
+          Alert.alert('Error', msg);
+        }
         setStartingSession(false);
         return;
       }
@@ -254,12 +269,14 @@ export default function InstantSessionsScreen() {
         });
       } else {
         // Handle specific error cases - preserve existing behavior
-        if (result.status === 400 && result.message?.includes('already have an active session')) {
+        const status = ('status' in result && (result as any).status) ? (result as any).status : undefined;
+        const message = ('message' in result && (result as any).message) ? String((result as any).message) : undefined;
+        if (status === 400 && message?.includes('already have an active session')) {
           console.log('Active Session Found: You already have an active session. Please check your messages or wait for the current session to end before starting a new one.');
           // Navigate to messages tab
           router.push('/patient-dashboard?tab=messages');
         } else {
-          console.error('Error:', result.message || 'Failed to start session');
+          console.error('Error:', message || 'Failed to start session');
         }
       }
     } catch (error) {
@@ -424,6 +441,15 @@ export default function InstantSessionsScreen() {
         sessionType={selectedSessionType}
         loading={startingSession}
         subscription={subscription}
+      />
+
+      <CustomAlertDialog
+        visible={showBusyModal}
+        onClose={() => setShowBusyModal(false)}
+        title="Doctor Busy"
+        message="The doctor is currently in another session. Please try again in a few minutes or choose another available doctor."
+        type="warning"
+        buttons={[{ text: 'OK', onPress: () => setShowBusyModal(false) }]}
       />
     </>
   );

@@ -2,18 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    Image,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    Vibration,
-    View,
+  Alert,
+  Animated,
+  Dimensions,
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  Vibration,
+  View,
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
 import backgroundBillingManager from '../services/backgroundBillingManager';
@@ -29,7 +29,7 @@ interface VideoCallModalProps {
   otherParticipantProfilePictureUrl?: string;
   onEndCall: () => void;
   onCallTimeout?: () => void;
-  onCallRejected?: () => void;
+  onCallRejected?: (rejectedBy?: string) => void;
   onCallAnswered?: () => void;
   isIncomingCall?: boolean;
   autoAcceptFromSystemUI?: boolean;
@@ -257,9 +257,9 @@ export default function VideoCallModal({
         connectSoundRef.current = null;
         hangupSoundRef.current = null;
       })();
-      if (videoCallService.current) {
-        videoCallService.current.reset();
-      }
+      // Sync-safe cleanup: immediately release all media/signaling resources
+      // clearInstance() internally calls destroyResources() synchronously
+      VideoCallService.clearInstance();
     };
   }, [isIncomingCall, appointmentId, autoAcceptFromSystemUI]);
 
@@ -517,7 +517,7 @@ export default function VideoCallModal({
             }, 500);
           }
         },
-        onCallRejected: () => {
+        onCallRejected: (rejectedBy?: string) => {
           console.log('❌ Video call rejected');
           onCallRejected?.();
         },
@@ -608,7 +608,7 @@ export default function VideoCallModal({
             }, 500);
           }
         },
-        onCallRejected: () => {
+        onCallRejected: (rejectedBy?: string) => {
           console.log('❌ Video call rejected');
           onCallRejected?.();
         },
@@ -618,7 +618,7 @@ export default function VideoCallModal({
         },
       };
 
-      await VideoCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events, doctorName, otherParticipantProfilePictureUrl);
+      await VideoCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events);
       videoCallService.current = VideoCallService.getInstance();
 
       // Get local stream for display
@@ -672,7 +672,7 @@ export default function VideoCallModal({
       }
 
       console.log('✅ Video call processed - resetting processing state');
-      
+
       // Stop ringtone when call is answered
       try {
         const ringtoneService = (await import('../services/ringtoneService')).default;
@@ -681,7 +681,7 @@ export default function VideoCallModal({
       } catch (error) {
         console.error('❌ Failed to stop ringtone:', error);
       }
-      
+
       // Reset processing state after successful processing
       setIsProcessingAnswer(false);
 
@@ -699,17 +699,46 @@ export default function VideoCallModal({
     // Unified reject handler - works identically for caller and receiver
     Vibration.vibrate(50);
 
-    // Stop ringtone when rejecting call
+    // Stop ringtone immediately when rejecting call
     try {
       await ringtoneService.stop();
+      console.log('🔕 Ringtone stopped on video call decline');
     } catch (e) {
       console.error('❌ Failed to stop ringtone:', e);
     }
 
-    // Use endCall for both incoming and outgoing to ensure both sides close properly
+    // 1. Hit backend to record decline
+    try {
+      const { environment } = await import('../config/environment');
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      const token = await AsyncStorage.getItem('auth_token');
+
+      await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/decline`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          appointment_id: appointmentId,
+          caller_id: isDoctor ? (doctorId || userId) : userId,
+          reason: 'declined_by_receiver',
+          declined_by: isDoctor ? 'doctor' : 'patient',
+        }),
+      });
+      console.log('📝 Call decline recorded in backend');
+    } catch (e) {
+      console.error('❌ Failed to record decline in DB:', e);
+    }
+
+    // 2. End WebRTC session with context
     // This ensures both sides close WebRTC connection and dismiss modal
     if (videoCallService.current) {
-      await videoCallService.current.endCall();
+      try {
+        await videoCallService.current.declineCall(isDoctor);
+      } catch (e) {
+        console.error('❌ Failed to decline call in WebRTC service:', e);
+      }
     }
     onRejectCall?.();
   };
@@ -816,6 +845,8 @@ export default function VideoCallModal({
         return 'Connected';
       case 'disconnected':
         return 'Call Ended';
+      case 'reconnecting':
+        return 'Reconnecting...';
       case 'failed':
         return 'Connection Failed';
       default:
@@ -833,6 +864,8 @@ export default function VideoCallModal({
         return '#9E9E9E';
       case 'failed':
         return '#F44336';
+      case 'reconnecting':
+        return '#FFC107'; // Amber for reconnecting
       default:
         return '#2196F3';
     }
@@ -848,6 +881,8 @@ export default function VideoCallModal({
         return '#9E9E9E'; // Gray for disconnected
       case 'failed':
         return '#F44336'; // Red for failed
+      case 'reconnecting':
+        return '#FFC107'; // Amber for reconnecting
       default:
         return '#2196F3'; // Blue for default
     }
@@ -1071,18 +1106,14 @@ export default function VideoCallModal({
           <Animated.View style={[styles.header, !shouldShowIncomingUI && { opacity: uiOpacity }, { zIndex: 2 }]}
             pointerEvents={shouldShowIncomingUI ? 'auto' : (uiVisible ? 'auto' : 'none')}
           >
-            <TouchableOpacity style={styles.backButton} onPress={() => { endCall(); }}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
+            <View style={styles.placeholder} />
             <Text style={styles.headerTitle}>{shouldShowIncomingUI ? 'Incoming Video Call' : 'Video Call'}</Text>
             <View style={styles.placeholder} />
           </Animated.View>
         ) : (
           // Connected call header - vertical: name then duration
           <Animated.View style={[styles.connectedHeader, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
-            <TouchableOpacity style={styles.backButton} onPress={() => { endCall(); }}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
+            <View style={styles.placeholder} />
 
             <View style={styles.connectedHeaderCenter}>
               <Text style={styles.connectedUserName}>

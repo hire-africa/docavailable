@@ -1,9 +1,14 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import authService from '@/services/authService';
+import { endedSessionStorageService } from '@/services/endedSessionStorageService';
+import { notificationApiService } from '@/services/notificationApiService';
 import { NotificationService } from '@/services/notificationService';
+import { RealTimeEventService } from '@/services/realTimeEventService';
+import { textSessionService } from '@/services/textSessionService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -119,6 +124,8 @@ export default function DoctorDashboard() {
   const [loadingEndedSessions, setLoadingEndedSessions] = useState(false);
   const [showEndedSessionMenu, setShowEndedSessionMenu] = useState<string | null>(null);
   const [ratings, setRatings] = useState<any[]>([]);
+  const [rating, setRating] = useState(0);
+  const [totalRatings, setTotalRatings] = useState(0);
   const [walletInfo, setWalletInfo] = useState<any>(null);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -127,6 +134,8 @@ export default function DoctorDashboard() {
   const [loadingTextSessions, setLoadingTextSessions] = useState(false);
   const [loadingRatings, setLoadingRatings] = useState(false);
   const [loadingWallet, setLoadingWallet] = useState(false);
+  const [availability, setAvailability] = useState<{ is_available_now: boolean; is_on_break?: boolean; manually_offline: boolean; working_hours?: any; current_slot_end?: any; next_slot_start?: any } | null>(null);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [incomingCall, setIncomingCall] = useState<any>(null);
   const [activeCall, setActiveCall] = useState<any>(null);
@@ -332,6 +341,60 @@ export default function DoctorDashboard() {
     }
   }, [user]);
 
+  useEffect(() => {
+    const fetchAvailability = async () => {
+      if (!user?.id) return;
+      setLoadingAvailability(true);
+      try {
+        const response = await apiService.get(`/doctors/${user.id}/availability`);
+        const data = (response as any)?.data?.data ?? (response as any)?.data;
+        if ((response as any)?.success && data) {
+          setAvailability({
+            is_available_now: !!data.is_available_now,
+            is_on_break: !!data.is_on_break,
+            manually_offline: !!data.manually_offline,
+            working_hours: data.working_hours,
+            current_slot_end: data.current_slot_end,
+            next_slot_start: data.next_slot_start,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching doctor availability:', error);
+      } finally {
+        setLoadingAvailability(false);
+      }
+    };
+
+    fetchAvailability();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (activeTab !== 'home') return;
+
+    const intervalId = setInterval(() => {
+      apiService.get(`/doctors/${user.id}/availability`).then((response: any) => {
+        const data = response?.data?.data ?? response?.data;
+        if (response?.success && data) {
+          setAvailability({
+            is_available_now: !!data.is_available_now,
+            is_on_break: !!data.is_on_break,
+            manually_offline: !!data.manually_offline,
+            working_hours: data.working_hours,
+            current_slot_end: data.current_slot_end,
+            next_slot_start: data.next_slot_start,
+          });
+        }
+      }).catch(() => {
+        // ignore
+      });
+    }, 30 * 1000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [user?.id, activeTab]);
+
   // Tab-specific refreshes
   useEffect(() => {
     if (user && activeTab === 'appointments') {
@@ -451,15 +514,51 @@ export default function DoctorDashboard() {
         if (activeTab === 'home') {
           refreshHomeTab();
         }
+
+        // Refresh notification count on focus to ensure it's up to date after returning from notifications page
+        notificationApiService.getUnreadCount()
+          .then(response => {
+            if (response.success && response.data) {
+              setUnreadNotificationCount(response.data.count);
+            }
+          })
+          .catch(err => console.error('Error refreshing notification count on focus:', err));
       }
     }, [user, activeTab])
   );
 
-  // Update refs whenever appointments change
   useEffect(() => {
     appointmentsRef.current = appointments;
     previousAppointmentsRef.current = appointments;
   }, [appointments]);
+
+  // Handle Real-Time Events
+  useEffect(() => {
+    const unsubscribe = RealTimeEventService.subscribe((event) => {
+      console.log('📡 [DoctorDashboard] Received real-time event:', event);
+
+      // Trigger data refreshes based on event type
+      if (event.type === 'appointment' || event.type === 'session' || event.type === 'system') {
+        console.log(`🔄 [DoctorDashboard] Triggering refreshes for ${event.type} event`);
+        refreshHomeTab();
+        refreshAppointmentsTab();
+
+        if (event.type === 'session') {
+          fetchConfirmedAppointments();
+          fetchActiveTextSessions();
+          loadEndedSessions();
+        }
+      } else if ((event.type as string) === 'wallet' || event.type === 'payment') {
+        console.log(`🔄 [DoctorDashboard] Triggering wallet refresh for ${event.type} event`);
+        fetchWalletInfo();
+      } else if (event.type === 'message') {
+        fetchConfirmedAppointments();
+        fetchActiveTextSessions();
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   // Real-time polling for appointments that are at or past their appointment time
   // This detects when a session is created and updates the chat list immediately
@@ -512,56 +611,9 @@ export default function DoctorDashboard() {
       return;
     }
 
-    console.log('🔄 [DoctorDashboard] Starting real-time polling for appointment sessions...');
-
-    const pollInterval = setInterval(async () => {
-      try {
-        // Re-check if we should still be polling using ref
-        if (!shouldPoll()) {
-          console.log('🛑 [DoctorDashboard] No more appointments near time, stopping polling');
-          clearInterval(pollInterval);
-          return;
-        }
-
-        const response = await apiService.get('/appointments');
-        if (response.success && response.data) {
-          const responseData = response.data as any;
-          const appointmentsData = (responseData.data || responseData) as any[];
-
-          // Check if any appointment gained a session_id
-          const previousAppointments = previousAppointmentsRef.current;
-          const hasNewSession = appointmentsData.some((newAppt: any) => {
-            const oldAppt = previousAppointments.find((a: any) => a.id === newAppt.id);
-            const oldHasSession = oldAppt?.session_id || oldAppt?.sessionId;
-            const newHasSession = newAppt.session_id || newAppt.sessionId;
-
-            // If appointment didn't have a session before but now does, refresh
-            return !oldHasSession && newHasSession;
-          });
-
-          if (hasNewSession) {
-            console.log('✅ [DoctorDashboard] Session created for appointment, refreshing chat list...');
-            setAppointments(appointmentsData);
-            appointmentsRef.current = appointmentsData;
-            previousAppointmentsRef.current = appointmentsData;
-            // Refresh confirmed appointments as well
-            fetchBookingRequests();
-          } else {
-            // Update appointments even if no new session (to keep data fresh)
-            setAppointments(appointmentsData);
-            appointmentsRef.current = appointmentsData;
-            previousAppointmentsRef.current = appointmentsData;
-          }
-        }
-      } catch (error) {
-        console.error('Error polling appointments for session updates:', error);
-      }
-    }, 8000); // Poll every 8 seconds (within 5-10s range as per documentation)
-
-    return () => {
-      console.log('🛑 [DoctorDashboard] Stopping real-time polling for appointment sessions');
-      clearInterval(pollInterval);
-    };
+    // Real-time polling replaced by global WebSocket events
+    console.log('📡 [DoctorDashboard] High-frequency polling disabled, relying on real-time events');
+    return;
   }, [user]);
 
   // Sidebar functions
@@ -787,15 +839,32 @@ export default function DoctorDashboard() {
   };
 
   const loadEndedSessions = async () => {
-    if (!user) return;
+    if (!user?.id) return;
 
-    setLoadingEndedSessions(true);
     try {
-      const sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
-      setEndedSessions(sessions);
+      setLoadingEndedSessions(true);
+
+      // 1. Fetch from local storage first
+      let sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
+      setEndedSessions(sessions || []);
+
+      // 2. Sync from backend
+      const historyResponse = await textSessionService.getHistory(1, 20);
+      if (historyResponse.success && historyResponse.data && historyResponse.data.length > 0) {
+        await endedSessionStorageService.syncEndedSessions(user.id, 'doctor', historyResponse.data);
+        // Refresh local list
+        sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
+        setEndedSessions(sessions || []);
+      }
     } catch (error) {
-      console.error('Error loading ended sessions:', error);
-      setEndedSessions([]);
+      console.error('Error loading/syncing ended sessions:', error);
+      // Fallback
+      try {
+        const sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
+        setEndedSessions(sessions || []);
+      } catch (innerError) {
+        setEndedSessions([]);
+      }
     } finally {
       setLoadingEndedSessions(false);
     }
@@ -1157,10 +1226,8 @@ export default function DoctorDashboard() {
       }
     } else if (appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') {
       // Call appointments (audio/video): Navigate to chat if:
-      // 1. call_unlocked_at is set (appointment activated by cron)
-      // 2. OR appointment time has passed
       // 3. OR it has a linked session
-      const callUnlocked = !!(patient.call_unlocked_at || (patient as any).call_unlocked_at);
+      const callUnlocked = !!((patient as any).call_unlocked_at);
       const isUpcoming = isAppointmentUpcoming(patient);
       if (callUnlocked || !isUpcoming || hasLinkedSession) {
         router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: patient.id } });
@@ -1763,99 +1830,283 @@ export default function DoctorDashboard() {
   };
 
   const renderHomeContent = () => (
-    <ScrollView
-      style={styles.content}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshingHome}
-          onRefresh={refreshHomeTab}
-          colors={['#4CAF50']}
-          tintColor="#4CAF50"
-        />
-      }
-    >
-      {/* Welcome Section - Updated to match patient dashboard */}
-      <View style={{ ...styles.header, alignItems: 'center', flexDirection: 'column', gap: 0, marginTop: 20, marginBottom: 24 }}>
-        {/* User Avatar */}
-        <View style={{ width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: '#eee', marginBottom: 12 }}>
-          {user?.profile_picture_url ? (
-            <Image source={{ uri: user.profile_picture_url }} style={{ width: 56, height: 56, borderRadius: 28 }} />
-          ) : user?.profile_picture ? (
-            <Image source={{ uri: user.profile_picture }} style={{ width: 56, height: 56, borderRadius: 28 }} />
-          ) : (
-            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#4CAF50' }}>
-              <FontAwesome name="user-md" size={20} color="#4CAF50" />
-            </View>
-          )}
-        </View>
-        <Text
-          style={{
-            fontSize: 28,
-            fontWeight: 'bold',
-            color: colors.text,
-            textAlign: 'center',
-            marginBottom: 4,
-            maxWidth: 220,
-            lineHeight: 34,
-            paddingHorizontal: 8,
-          }}
-          numberOfLines={1}
-          ellipsizeMode="tail"
+    (() => {
+      const hour = new Date().getHours();
+      const timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+      const firstName = user?.display_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
+      const welcomeTitle = `${timeGreeting} Dr. ${firstName}`;
+
+      const shiftInfo = (() => {
+        const formatEnds = (t: any) => {
+          if (!t) return null;
+          if (typeof t === 'string') return t;
+          try {
+            return new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          } catch {
+            return null;
+          }
+        };
+
+        const endsFromApi = formatEnds((availability as any)?.current_slot_end);
+        const nextFromApi = typeof (availability as any)?.next_slot_start === 'string'
+          ? (availability as any)?.next_slot_start
+          : null;
+
+        if (availability?.is_available_now) {
+          return endsFromApi ? `Shift ends at ${endsFromApi}` : null;
+        }
+
+        if ((availability as any)?.is_on_break) {
+          return endsFromApi ? `On duty until ${endsFromApi}` : null;
+        }
+
+        if (nextFromApi) {
+          return `Next shift starts ${nextFromApi}`;
+        }
+
+        const workingHours = availability?.working_hours;
+        if (!workingHours || typeof workingHours !== 'object') return null;
+
+        const now = new Date();
+        const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+        const todayKey = dayKeys[now.getDay()];
+
+        const parseMinutes = (time: string) => {
+          const [h, m] = time.split(':').map(v => parseInt(v, 10));
+          if (Number.isNaN(h) || Number.isNaN(m)) return null;
+          return h * 60 + m;
+        };
+
+        const formatTime = (minutes: number) => {
+          const d = new Date(now);
+          d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+          return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        };
+
+        const getSlotsForDay = (dayKey: string) => {
+          const day = workingHours[dayKey];
+          if (!day || !day.enabled || !Array.isArray(day.slots)) return [] as Array<{ start: string; end: string }>;
+          return day.slots.filter((s: any) => s && typeof s.start === 'string' && typeof s.end === 'string');
+        };
+
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+        if (availability?.is_available_now) {
+          const slots = getSlotsForDay(todayKey);
+          const endsToday = slots
+            .map(s => parseMinutes(s.end))
+            .filter((m): m is number => m !== null)
+            .filter(endMin => {
+              const startMin = parseMinutes(slots.find(ss => ss.end === slots.find(x => x.end)?.end)?.start || '') ?? 0;
+              return endMin > nowMinutes;
+            })
+            .sort((a, b) => a - b)[0];
+
+          if (endsToday !== undefined) {
+            return `Shift ends at ${formatTime(endsToday)}`;
+          }
+
+          return null;
+        }
+
+        // Next shift: search next 7 days for first slot start after now
+        for (let offset = 0; offset < 7; offset++) {
+          const dayIndex = (now.getDay() + offset) % 7;
+          const dayKey = dayKeys[dayIndex];
+          const slots = getSlotsForDay(dayKey);
+          if (slots.length === 0) continue;
+
+          const candidate = slots
+            .map(s => ({ startMin: parseMinutes(s.start), start: s.start }))
+            .filter(s => s.startMin !== null)
+            .map(s => s.startMin as number)
+            .filter(startMin => offset > 0 || startMin > nowMinutes)
+            .sort((a, b) => a - b)[0];
+
+          if (candidate !== undefined) {
+            const prefix = offset === 0 ? 'Next shift starts at' : 'Next shift starts';
+            const dayLabel = offset === 0 ? '' : ` ${dayKey.charAt(0).toUpperCase()}${dayKey.slice(1)}`;
+            return `${prefix}${dayLabel} at ${formatTime(candidate)}`;
+          }
+        }
+
+        return null;
+      })();
+
+      const pillStatus = (() => {
+        if (availability?.is_available_now) {
+          return { dot: '#4CAF50', text: 'On Duty', textColor: '#4CAF50', bg: '#E8F5E8' };
+        }
+        if ((availability as any)?.is_on_break) {
+          return { dot: '#F4C430', text: 'On Break · Getting you back online', textColor: '#F4C430', bg: '#FFF8E1' };
+        }
+        if (availability?.manually_offline) {
+          return { dot: '#FF3B30', text: 'Availability paused', textColor: '#FF3B30', bg: '#FDECEC' };
+        }
+        return { dot: '#111214', text: 'Off Duty', textColor: '#111214', bg: '#EFEFEF' };
+      })();
+
+      return (
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshingHome}
+              onRefresh={refreshHomeTab}
+              colors={['#4CAF50']}
+              tintColor="#4CAF50"
+            />
+          }
         >
-          Hi Dr. {user?.display_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there'}
-        </Text>
-        <Text
-          style={{
-            fontSize: 16,
-            color: colors.textSecondary,
-            textAlign: 'center',
-            maxWidth: 260,
-            lineHeight: 22,
-            paddingHorizontal: 8,
-          }}
-          numberOfLines={2}
-          ellipsizeMode="tail"
-        >
-          Manage your practice and patients
-        </Text>
-      </View>
-
-
-      <View style={[styles.quickActions, { marginTop: 20 }]}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.actionGrid}>
-          <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('appointments')}>
-            <View style={styles.actionIcon}>
-              <Icon name="calendar" size={20} color="#666" />
+          {/* Welcome Section - Updated to match patient dashboard */}
+          <LinearGradient
+            colors={['#4CAF50', '#45a049', '#2E7D32']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              borderRadius: 20,
+              padding: 24,
+              marginBottom: 24,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.08,
+              shadowRadius: 12,
+              elevation: 4,
+              alignItems: 'center',
+              flexDirection: 'column',
+              gap: 0,
+              marginTop: 20,
+            }}
+          >
+            {/* User Avatar */}
+            <View style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              overflow: 'hidden',
+              backgroundColor: '#E8F5E8',
+              marginBottom: 16,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 3,
+            }}>
+              {user?.profile_picture_url ? (
+                <Image source={{ uri: user.profile_picture_url }} style={{ width: 64, height: 64, borderRadius: 32 }} />
+              ) : user?.profile_picture ? (
+                <Image source={{ uri: user.profile_picture }} style={{ width: 64, height: 64, borderRadius: 32 }} />
+              ) : (
+                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#E8F5E8', alignItems: 'center', justifyContent: 'center' }}>
+                  <FontAwesome name="user-md" size={24} color="#4CAF50" />
+                </View>
+              )}
             </View>
-            <Text style={styles.actionTitle}>Appointments</Text>
-            <Text style={styles.actionSubtitle}>Manage bookings</Text>
-          </TouchableOpacity>
+            <Text
+              style={{
+                fontSize: 28,
+                fontWeight: 'bold',
+                color: '#FFFFFF',
+                textAlign: 'center',
+                marginBottom: 6,
+                maxWidth: 280,
+                lineHeight: 34,
+                paddingHorizontal: 8,
+              }}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {welcomeTitle}
+            </Text>
+            {/* Status Pill */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setActiveTab('working-hours')}
+              style={{
+                backgroundColor: pillStatus.bg,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                marginBottom: 8,
+                alignSelf: 'center',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <View style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: pillStatus.dot,
+              }} />
+              <Text style={{
+                fontSize: 12,
+                fontWeight: '600',
+                color: pillStatus.textColor,
+                textAlign: 'center',
+                letterSpacing: 0.2,
+              }}>
+                {loadingAvailability ? 'Checking availability...' : pillStatus.text}
+              </Text>
+            </TouchableOpacity>
+            {!!shiftInfo && (
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: 'rgba(255,255,255,0.9)',
+                  textAlign: 'center',
+                  marginTop: 4,
+                  maxWidth: 280,
+                  lineHeight: 18,
+                  paddingHorizontal: 8,
+                }}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
+                {shiftInfo}
+              </Text>
+            )}
+          </LinearGradient>
 
-          <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('messages')}>
-            <View style={styles.actionIcon}>
-              <Icon name="message" size={20} color="#666" />
+
+          <View style={[styles.quickActions, { marginTop: 20 }]}>
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <View style={styles.actionGrid}>
+              <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('appointments')}>
+                <View style={styles.actionIcon}>
+                  <Icon name="calendar" size={20} color="#666" />
+                </View>
+                <Text style={styles.actionTitle}>Appointments</Text>
+                <Text style={styles.actionSubtitle}>Manage bookings</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('messages')}>
+                <View style={styles.actionIcon}>
+                  <Icon name="message" size={20} color="#666" />
+                </View>
+                <Text style={styles.actionTitle}>Messages</Text>
+                <Text style={styles.actionSubtitle}>Chat with patients</Text>
+              </TouchableOpacity>
+
+              <WorkingHoursCard onPress={() => setActiveTab('working-hours')} enabledDaysCount={enabledDaysCount} />
+
+              <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/doctor-withdrawals')}>
+                <View style={styles.actionIcon}>
+                  <FontAwesome name="money" size={20} color="#666" />
+                </View>
+                <Text style={styles.actionTitle}>Earnings</Text>
+                <Text style={styles.actionSubtitle}>Withdraw funds</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.actionTitle}>Messages</Text>
-            <Text style={styles.actionSubtitle}>Chat with patients</Text>
-          </TouchableOpacity>
-
-          <WorkingHoursCard onPress={() => setActiveTab('working-hours')} enabledDaysCount={enabledDaysCount} />
-
-          <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/doctor-withdrawals')}>
-            <View style={styles.actionIcon}>
-              <FontAwesome name="money" size={20} color="#666" />
-            </View>
-            <Text style={styles.actionTitle}>Earnings</Text>
-            <Text style={styles.actionSubtitle}>Withdraw funds</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+          </View>
 
 
 
-    </ScrollView>
+        </ScrollView>
+      );
+    })()
   );
 
   const renderAppointmentsContent = () => (
@@ -2266,235 +2517,287 @@ export default function DoctorDashboard() {
             );
           }
 
-          return allItems.map((item, index) => {
-            const isLastItem = index === allItems.length - 1;
+          // Group items by date
+          const groupItemsByDate = (items: any[]) => {
+            const groups: { [key: string]: any[] } = {
+              'Today': [],
+              'Yesterday': [],
+              'This Week': [],
+              'Older': []
+            };
 
-            if (item.type === 'ended') {
-              // Render ended session as card
-              return (
-                <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: colors.background,
-                      borderRadius: 12,
-                      marginHorizontal: 20,
-                      marginBottom: 12,
-                      padding: 16,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.1,
-                      shadowRadius: 4,
-                      elevation: 3
-                    }}
-                    onPress={() => {
-                      router.push({ pathname: '/ended-session/[appointmentId]', params: { appointmentId: item.appointmentId.toString() } });
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <DoctorProfilePicture
-                        size={48}
-                        style={{ marginRight: 16 }}
-                        profilePictureUrl={item.patient_profile_picture_url || item.patient_profile_picture}
-                        name={item.patient_name}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
-                          {item.patient_name || 'Patient'}
-                        </Text>
-                        <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                          {item.reason || 'General Checkup'}
-                        </Text>
-                        <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
-                          Session ended • {formatDuration(item.session_duration || 0)}
-                        </Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>
-                          {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date'}
-                        </Text>
-                        <TouchableOpacity
-                          style={{
-                            padding: 4,
-                          }}
-                          onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointmentId ? null : item.appointmentId)}
-                        >
-                          <Icon name="more" size={16} color="#999" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
-                  {/* Menu dropdown */}
-                  {showEndedSessionMenu === item.appointmentId && (
-                    <View style={{
-                      position: 'absolute',
-                      right: 20,
-                      top: 60,
-                      backgroundColor: colors.card,
-                      borderRadius: 8,
-                      paddingVertical: 4,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.25,
-                      shadowRadius: 4,
-                      elevation: 5,
-                      zIndex: 2,
-                      minWidth: 120,
-                    }}>
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+
+            const lastWeek = new Date(today);
+            lastWeek.setDate(lastWeek.getDate() - 7);
+
+            items.forEach(item => {
+              const itemDate = new Date(item.sortDate);
+              itemDate.setHours(0, 0, 0, 0);
+
+              if (itemDate.getTime() === today.getTime()) {
+                groups['Today'].push(item);
+              } else if (itemDate.getTime() === yesterday.getTime()) {
+                groups['Yesterday'].push(item);
+              } else if (itemDate.getTime() >= lastWeek.getTime()) {
+                groups['This Week'].push(item);
+              } else {
+                groups['Older'].push(item);
+              }
+            });
+
+            return groups;
+          };
+
+          const groupedItems = groupItemsByDate(allItems);
+          const sections = Object.entries(groupedItems).filter(([_, items]) => items.length > 0);
+
+          return sections.map(([title, items], sectionIndex) => (
+            <View key={`section_${title}`}>
+              <View style={{
+                paddingHorizontal: 20,
+                paddingVertical: 10,
+                backgroundColor: colors.background,
+                marginBottom: 8,
+                marginTop: sectionIndex === 0 ? 0 : 8
+              }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1 }}>
+                  {title}
+                </Text>
+              </View>
+              {items.map((item) => {
+                if (item.type === 'ended') {
+                  // Render ended session as card
+                  return (
+                    <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
                       <TouchableOpacity
                         style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
+                          backgroundColor: colors.background,
+                          borderRadius: 12,
+                          marginHorizontal: 20,
+                          marginBottom: 12,
+                          padding: 16,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.1,
+                          shadowRadius: 4,
+                          elevation: 3
                         }}
-                        onPress={() => handleExportEndedSession(item.appointmentId)}
-                      >
-                        <Icon name="export" size={20} color="#666" />
-                        <Text style={{ fontSize: 14, color: colors.text }}>Export</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
+                        onPress={() => {
+                          router.push({ pathname: '/ended-session/[appointmentId]', params: { appointmentId: item.appointmentId.toString() } });
                         }}
-                        onPress={() => handleDeleteEndedSession(item.appointmentId)}
                       >
-                        <Icon name="delete" size={20} color="#666" />
-                        <Text style={{ fontSize: 14, color: '#FF3B30' }}>Delete</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              );
-            } else if (item.type === 'active_text') {
-              // Render active text session as card
-              return (
-                <TouchableOpacity
-                  key={`active_text_${item.id}`}
-                  style={{
-                    backgroundColor: colors.background,
-                    borderRadius: 12,
-                    marginHorizontal: 20,
-                    marginBottom: 12,
-                    padding: 16,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 3,
-                    borderWidth: item.isActive ? 2 : 0,
-                    borderColor: item.isActive ? '#4CAF50' : 'transparent'
-                  }}
-                  onPress={() => handleSelectTextSession(item)}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{ position: 'relative' }}>
-                      <DoctorProfilePicture
-                        size={48}
-                        style={{ marginRight: 16 }}
-                        profilePictureUrl={item.patient?.profile_picture_url || item.patient?.profile_picture}
-                        name={item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Patient'}
-                      />
-                      {/* Active indicator */}
-                      {item.isActive && (
-                        <View style={{
-                          position: 'absolute',
-                          bottom: 2,
-                          right: 2,
-                          width: 12,
-                          height: 12,
-                          borderRadius: 6,
-                          backgroundColor: '#4CAF50',
-                          borderWidth: 2,
-                          borderColor: '#FFFFFF'
-                        }} />
-                      )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
-                        {item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Unknown Patient'}
-                      </Text>
-                      <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                        Text Session
-                      </Text>
-                      <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
-                        {item.status === 'waiting_for_doctor' ? 'Waiting for response' : 'Active'}
-                      </Text>
-                    </View>
-                    <Text style={{ fontSize: 12, color: '#999' }}>
-                      Now
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            } else {
-              // Render confirmed appointment as card
-              return (
-                <TouchableOpacity
-                  key={`confirmed_${item.id || item.patientId || 'unknown'}`}
-                  style={{
-                    backgroundColor: colors.background,
-                    borderRadius: 12,
-                    marginHorizontal: 20,
-                    marginBottom: 12,
-                    padding: 16,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 3
-                  }}
-                  onPress={() => handleSelectPatient(item)}
-                  activeOpacity={0.7}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <DoctorProfilePicture
-                      size={48}
-                      style={{ marginRight: 16 }}
-                      profilePictureUrl={item.patientProfilePictureUrl || item.patientProfilePicture || item.patient_profile_picture_url || item.patient_profile_picture}
-                      name={item.patient_name || item.patientName || 'Patient'}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
-                        {item.patient_name || 'Unknown Patient'}
-                      </Text>
-                      <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                        {item.reason || 'Chat'}
-                      </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
-                          {item.appointment_type === 'text' ? 'Text Chat' :
-                            item.appointment_type === 'voice' ? 'Voice Call' :
-                              item.appointment_type === 'video' ? 'Video Call' : 'Chat'}
-                        </Text>
-                        {isAppointmentUpcoming(item) && (
-                          <View style={{
-                            backgroundColor: '#FFF3E0',
-                            borderRadius: 8,
-                            paddingHorizontal: 8,
-                            paddingVertical: 2,
-                            marginLeft: 8,
-                            borderWidth: 1,
-                            borderColor: '#FFB74D',
-                          }}>
-                            <Text style={{ fontSize: 10, color: '#FF9800', fontWeight: '600' }}>
-                              UPCOMING
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <DoctorProfilePicture
+                            size={48}
+                            style={{ marginRight: 16 }}
+                            profilePictureUrl={item.patient_profile_picture_url || item.patient_profile_picture}
+                            name={item.patient_name}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
+                              {item.patient_name || 'Patient'}
+                            </Text>
+                            <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                              {item.reason || 'General Checkup'}
+                            </Text>
+                            <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
+                              Session ended • {formatDuration(item.session_duration || 0)}
                             </Text>
                           </View>
-                        )}
-                      </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>
+                              {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date'}
+                            </Text>
+                            <TouchableOpacity
+                              style={{
+                                padding: 4,
+                              }}
+                              onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointmentId ? null : item.appointmentId)}
+                            >
+                              <Icon name="more" size={16} color="#999" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+
+                      {/* Menu dropdown */}
+                      {showEndedSessionMenu === item.appointmentId && (
+                        <View style={{
+                          position: 'absolute',
+                          right: 20,
+                          top: 60,
+                          backgroundColor: colors.card,
+                          borderRadius: 8,
+                          paddingVertical: 4,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.25,
+                          shadowRadius: 4,
+                          elevation: 5,
+                          zIndex: 2,
+                          minWidth: 120,
+                        }}>
+                          <TouchableOpacity
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              paddingHorizontal: 16,
+                              paddingVertical: 12,
+                            }}
+                            onPress={() => handleExportEndedSession(item.appointmentId)}
+                          >
+                            <Icon name="export" size={20} color="#666" />
+                            <Text style={{ fontSize: 14, color: colors.text }}>Export</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              paddingHorizontal: 16,
+                              paddingVertical: 12,
+                            }}
+                            onPress={() => handleDeleteEndedSession(item.appointmentId)}
+                          >
+                            <Icon name="delete" size={20} color="#666" />
+                            <Text style={{ fontSize: 14, color: '#FF3B30' }}>Delete</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
-                    <Text style={{ fontSize: 12, color: '#999' }}>
-                      {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            }
-          });
+                  );
+                } else if (item.type === 'active_text') {
+                  // Render active text session as card
+                  return (
+                    <TouchableOpacity
+                      key={`active_text_${item.id}`}
+                      style={{
+                        backgroundColor: colors.background,
+                        borderRadius: 12,
+                        marginHorizontal: 20,
+                        marginBottom: 12,
+                        padding: 16,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 4,
+                        elevation: 3,
+                        borderWidth: item.isActive ? 2 : 0,
+                        borderColor: item.isActive ? '#4CAF50' : 'transparent'
+                      }}
+                      onPress={() => handleSelectTextSession(item)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ position: 'relative' }}>
+                          <DoctorProfilePicture
+                            size={48}
+                            style={{ marginRight: 16 }}
+                            profilePictureUrl={item.patient?.profile_picture_url || item.patient?.profile_picture}
+                            name={item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Patient'}
+                          />
+                          {/* Active indicator */}
+                          {item.isActive && (
+                            <View style={{
+                              position: 'absolute',
+                              bottom: 2,
+                              right: 2,
+                              width: 12,
+                              height: 12,
+                              borderRadius: 6,
+                              backgroundColor: '#4CAF50',
+                              borderWidth: 2,
+                              borderColor: '#FFFFFF'
+                            }} />
+                          )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
+                            {item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Unknown Patient'}
+                          </Text>
+                          <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                            Text Session
+                          </Text>
+                          <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
+                            {item.status === 'waiting_for_doctor' ? 'Waiting for response' : 'Active'}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 12, color: '#999' }}>
+                          Now
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                } else {
+                  // Render confirmed appointment as card
+                  return (
+                    <TouchableOpacity
+                      key={`confirmed_${item.id || item.patientId || 'unknown'}`}
+                      style={{
+                        backgroundColor: colors.background,
+                        borderRadius: 12,
+                        marginHorizontal: 20,
+                        marginBottom: 12,
+                        padding: 16,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 4,
+                        elevation: 3
+                      }}
+                      onPress={() => handleSelectPatient(item)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <DoctorProfilePicture
+                          size={48}
+                          style={{ marginRight: 16 }}
+                          profilePictureUrl={item.patientProfilePictureUrl || item.patientProfilePicture || item.patient_profile_picture_url || item.patient_profile_picture}
+                          name={item.patient_name || item.patientName || 'Patient'}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
+                            {item.patient_name || 'Unknown Patient'}
+                          </Text>
+                          <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                            {item.reason || 'Chat'}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
+                              {item.appointment_type === 'text' ? 'Text Chat' :
+                                item.appointment_type === 'voice' ? 'Voice Call' :
+                                  item.appointment_type === 'video' ? 'Video Call' : 'Chat'}
+                            </Text>
+                            {isAppointmentUpcoming(item) && (
+                              <View style={{
+                                backgroundColor: '#FFF3E0',
+                                borderRadius: 8,
+                                paddingHorizontal: 8,
+                                paddingVertical: 2,
+                                marginLeft: 8,
+                                borderWidth: 1,
+                                borderColor: '#FFB74D',
+                              }}>
+                                <Text style={{ fontSize: 10, color: '#FF9800', fontWeight: '600' }}>
+                                  UPCOMING
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <Text style={{ fontSize: 12, color: '#999' }}>
+                          {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }
+              })}
+            </View>
+          ));
         })()}
       </ScrollView>
     </View>
@@ -3968,7 +4271,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 300,
-    backgroundColor: colors.card,
+    backgroundColor: '#111214',
     borderTopRightRadius: 24,
     borderBottomRightRadius: 24,
     shadowColor: '#000',
@@ -3989,7 +4292,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#222528',
     marginBottom: 20,
   },
   sidebarProfileImage: {
@@ -4001,12 +4304,12 @@ const createStyles = (colors: any) => StyleSheet.create({
   sidebarUserName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.text,
+    color: '#F2F2F2',
     marginBottom: 4,
   },
   sidebarUserEmail: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: '#A3A5A8',
   },
   sectionHeader: {
     fontSize: 18,
@@ -4016,7 +4319,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   sectionGroup: {
     marginBottom: 24,
-    backgroundColor: colors.background,
+    backgroundColor: '#1C1E22',
     borderRadius: 16,
     overflow: 'hidden',
     alignSelf: 'center',
@@ -4029,13 +4332,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 20,
     width: '100%',
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#2A2D32',
   },
   iconBox: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: colors.surface,
+    backgroundColor: '#222528',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -4050,7 +4353,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   sidebarMenuItemText: {
     fontSize: 16,
-    color: colors.text,
+    color: '#E8E8E8',
     marginLeft: 4,
     fontWeight: '600',
     flex: 1,

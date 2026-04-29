@@ -1,7 +1,7 @@
 // Text Session Service for handling appointment-to-session conversion
+import { SessionContext, contextToString } from '../types/sessionContext';
 import { getTimezoneInfo, isAppointmentTimeReached } from '../utils/timezoneUtils';
 import { apiService } from './apiService';
-import { StartSessionResponse, SessionContext, contextToString } from '../types/sessionContext';
 
 export interface TextSession {
   id: number;
@@ -49,10 +49,10 @@ export const textSessionService = {
     try {
       // Debug logging disabled to prevent console spam (uncomment if needed for debugging)
       // console.log('🔄 [TextSessionService] Starting session from appointment:', appointmentId, 'modality:', modality);
-      
+
       // Get user's timezone for backend processing
       const timezoneInfo = getTimezoneInfo();
-      
+
       const response = await apiService.post(`/appointments/${appointmentId}/start-session`, {
         modality: modality || 'text' // Default to text if not specified
       }, {
@@ -79,14 +79,14 @@ export const textSessionService = {
           if (data.session_id) {
             const context: SessionContext = {
               context_type: 'text_session',
-              context_id: String(data.session_id)
+              context_id: Number(data.session_id)
             };
             console.log('✅ [TextSessionService] Session started successfully (legacy format):', contextToString(context));
             return context;
           }
         }
       }
-      
+
       // Only log error if actually failed
       if (!response.success) {
         console.error('❌ [TextSessionService] Failed to start session:', response);
@@ -105,7 +105,7 @@ export const textSessionService = {
     try {
       // Debug logging disabled to prevent console spam (uncomment if needed for debugging)
       // console.log('🔄 [TextSessionService] Creating text session from appointment (legacy):', appointment.id);
-      
+
       // Try the new unified endpoint first
       const context = await textSessionService.startSessionFromAppointment(appointment.id, 'text');
       if (context && context.context_type === 'text_session') {
@@ -115,7 +115,7 @@ export const textSessionService = {
           return sessionResponse.data;
         }
       }
-      
+
       // Fallback to legacy endpoint if new one fails
       const timezoneInfo = getTimezoneInfo();
       const response = await apiService.post('/text-sessions/create-from-appointment', {
@@ -148,7 +148,7 @@ export const textSessionService = {
     // Only convert text appointments that are confirmed and ready
     const isTextAppointment = appointment.appointment_type === 'text';
     const isConfirmed = appointment.status === 'confirmed' || appointment.status === 1;
-    
+
     if (!isTextAppointment || !isConfirmed) {
       return false;
     }
@@ -157,12 +157,12 @@ export const textSessionService = {
     try {
       const dateStr = appointment.appointment_date;
       const timeStr = appointment.appointment_time;
-      
+
       if (!dateStr || !timeStr) return false;
 
       // Use timezone utility for consistent time handling
       const isTimeReached = isAppointmentTimeReached(dateStr, timeStr);
-      
+
       // Debug logging for frontend time validation (disabled to prevent console spam)
       // Uncomment below if you need to debug time validation issues
       // const timezoneInfo = getTimezoneInfo();
@@ -173,7 +173,7 @@ export const textSessionService = {
       //   is_time_reached: isTimeReached,
       //   ...timezoneInfo
       // });
-      
+
       return isTimeReached;
     } catch (error) {
       console.error('Error checking appointment time:', error);
@@ -199,13 +199,47 @@ export const textSessionService = {
   hasTextSessionForAppointment: async (appointmentId: string | number): Promise<boolean> => {
     try {
       const activeSessions = await textSessionService.getActiveTextSessions();
-      return activeSessions.some(session => 
-        session.appointment_id === appointmentId || 
+      return activeSessions.some(session =>
+        session.appointment_id === appointmentId ||
         session.appointment_id === Number(appointmentId)
       );
     } catch (error) {
       console.error('Error checking text session for appointment:', error);
       return false;
+    }
+  },
+
+  /**
+   * Get history of ended text sessions
+   */
+  getHistory: async (page: number = 1, perPage: number = 15): Promise<{
+    success: boolean;
+    data: TextSession[];
+    pagination?: {
+      current_page: number;
+      last_page: number;
+      per_page: number;
+      total: number;
+    }
+  }> => {
+    try {
+      const response = await apiService.get('/text-sessions/history', { page, per_page: perPage });
+      if (response.success && response.data) {
+        return {
+          success: true,
+          data: response.data.data || response.data, // Handle both paginated and direct data
+          pagination: response.data.current_page ? {
+            current_page: response.data.current_page,
+            last_page: response.data.last_page,
+            per_page: response.data.per_page,
+            total: response.data.total
+          } : undefined
+        };
+      }
+      return { success: false, data: [] };
+    } catch (error) {
+      console.error('Error fetching text session history:', error);
+      return { success: false, data: [] };
     }
   }
 };

@@ -29,9 +29,9 @@ const ReadReceipt: React.FC<ReadReceiptProps> = ({
       return (
         <View style={styles.container}>
           <Text style={[styles.timeText, { color: '#666' }]}>
-            {new Date(messageTime).toLocaleTimeString([], { 
-              hour: '2-digit', 
-              minute: '2-digit' 
+            {new Date(messageTime).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
             })}
           </Text>
         </View>
@@ -40,63 +40,54 @@ const ReadReceipt: React.FC<ReadReceiptProps> = ({
     return null;
   }
 
-    // For own messages, show delivery status
+  // For own messages, show delivery status
   const renderDeliveryStatus = () => {
-    // Debug logging
-    if (isOwnMessage) {
-      // console.log(`🔍 ReadReceipt Debug - deliveryStatus: ${deliveryStatus}, otherParticipantId: ${otherParticipantId}, readBy:`, readBy);
-    }
-    
+    const tickColor = 'rgba(255,255,255,0.55)'; // Muted white for sent/delivered
+    const readColor = '#40C4FF'; // Professional muted sky blue for read status
+
     switch (deliveryStatus) {
       case 'sending':
         return (
           <View style={styles.tickContainer}>
-            <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="time-outline" size={10} color={tickColor} />
           </View>
         );
       case 'sent':
         return (
           <View style={styles.tickContainer}>
-            <Ionicons name="checkmark" size={12} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="checkmark" size={13} color={tickColor} />
           </View>
         );
       case 'delivered':
         return (
           <View style={styles.tickContainer}>
-            <Ionicons name="checkmark" size={12} color="rgba(255,255,255,0.7)" />
-            <Ionicons name="checkmark" size={12} color="rgba(255,255,255,0.7)" style={styles.secondTick} />
+            <Ionicons name="checkmark" size={13} color={tickColor} />
+            <Ionicons name="checkmark" size={13} color={tickColor} style={styles.secondTick} />
           </View>
         );
       case 'read':
-        // When delivery status is 'read', show blue ticks
-        // This means the message has been read by the recipient
-        // console.log(`🔵 BLUE TICKS: Showing blue ticks for read status`);
         return (
           <View style={styles.tickContainer}>
-            <Ionicons name="checkmark" size={12} color="#2196F3" />
-            <Ionicons name="checkmark" size={12} color="#2196F3" style={styles.secondTick} />
+            <Ionicons name="checkmark" size={13} color={readColor} />
+            <Ionicons name="checkmark" size={13} color={readColor} style={styles.secondTick} />
           </View>
         );
       default:
-        return (
-          <View style={styles.tickContainer}>
-            <Ionicons name="checkmark" size={12} color="rgba(255,255,255,0.7)" />
-          </View>
-        );
+        return null;
     }
   };
 
   return (
     <View style={styles.container}>
-      {renderDeliveryStatus()}
       {showTime && messageTime && (
         <Text style={styles.timeText}>
-          {new Date(messageTime).toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
+          {new Date(messageTime).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
           })}
         </Text>
       )}
+      {isOwnMessage && renderDeliveryStatus()}
     </View>
   );
 };

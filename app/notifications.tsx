@@ -1,6 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router, Stack } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -53,28 +54,150 @@ function NotificationsContent() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
 
-  useEffect(() => {
-    loadNotifications();
-  }, []);
+  const deriveDisplayText = (n: ApiNotification): { title: string; message: string } => {
+    const data: any = n.data || {};
+    const notificationType = (data?.type || n.type || 'system').toString();
 
-  // Subscribe to real-time events
+    const fallbackTitle = 'Notification';
+    const fallbackMessage = '';
+
+    // Prefer explicit fields if present
+    const explicitTitle = (n as any)?.title || data?.title;
+    const explicitMessage = (n as any)?.body || data?.body || data?.message;
+
+    if (explicitTitle || explicitMessage) {
+      return {
+        title: explicitTitle || fallbackTitle,
+        message: explicitMessage || fallbackMessage,
+      };
+    }
+
+    // Derive from type + data payload (database notification format)
+    if (notificationType === 'incoming_call') {
+      const callerName = data?.caller_name || data?.doctor_name || data?.doctorName || data?.callerName || 'Unknown';
+      return {
+        title: 'Incoming call',
+        message: `Call from ${callerName}`,
+      };
+    }
+
+    // Common DB types seen for patients
+    if (notificationType === 'welcome') {
+      return {
+        title: 'Welcome',
+        message: 'Welcome to Doc Available',
+      };
+    }
+
+    // New canonical DB types
+    if (notificationType.startsWith('appointment_')) {
+      const appointmentId = data?.appointment_id || data?.appointmentId;
+      const subtype = notificationType.replace('appointment_', '').replace(/_/g, ' ');
+      return {
+        title: 'Appointment update',
+        message: appointmentId ? `Appointment #${appointmentId}: ${subtype}` : `Appointment: ${subtype}`,
+      };
+    }
+
+    if (notificationType.startsWith('text_session_')) {
+      const sessionId = data?.session_id || data?.text_session_id || data?.textSessionId;
+      const subtype = notificationType.replace('text_session_', '').replace(/_/g, ' ');
+      return {
+        title: 'Text session',
+        message: sessionId ? `Session #${sessionId}: ${subtype}` : `Session: ${subtype}`,
+      };
+    }
+
+    if (notificationType.startsWith('wallet_')) {
+      const subtype = notificationType.replace('wallet_', '').replace(/_/g, ' ');
+      const amount = data?.amount || data?.transaction_amount || data?.transaction?.amount;
+      const amountText = amount !== undefined && amount !== null ? ` (${amount})` : '';
+      return {
+        title: 'Wallet update',
+        message: `${subtype}${amountText}`.trim(),
+      };
+    }
+
+    if (notificationType.startsWith('subscription_')) {
+      const subtype = notificationType.replace('subscription_', '').replace(/_/g, ' ');
+      const planName = data?.plan_name || data?.plan?.name || data?.subscription?.plan_name;
+      return {
+        title: 'Subscription update',
+        message: planName ? `${subtype}: ${planName}` : subtype,
+      };
+    }
+
+    if (notificationType.startsWith('call_')) {
+      const subtype = notificationType.replace('call_', '').replace(/_/g, ' ');
+      return {
+        title: 'Call update',
+        message: subtype,
+      };
+    }
+
+    if (notificationType.startsWith('doctor_')) {
+      const subtype = notificationType.replace('doctor_', '').replace(/_/g, ' ');
+      return {
+        title: 'Account update',
+        message: subtype,
+      };
+    }
+
+    if (notificationType === 'text_session_message') {
+      const senderName = data?.sender_name || data?.from_name || data?.doctor_name || data?.patient_name || 'Someone';
+      const preview = (data?.message || data?.text || data?.body || '').toString();
+      return {
+        title: `New message${senderName ? ` from ${senderName}` : ''}`,
+        message: preview || 'You have a new message',
+      };
+    }
+
+    if (notificationType === 'custom') {
+      // Many custom notifications only have data payload; best-effort extraction.
+      const title = data?.subject || data?.notification_title || data?.heading || fallbackTitle;
+      const message = data?.content || data?.notification_body || data?.text || fallbackMessage;
+      return {
+        title: title || fallbackTitle,
+        message: message || fallbackMessage,
+      };
+    }
+
+    if (notificationType === 'chat_message') {
+      const senderName = data?.sender_name || 'Someone';
+      return {
+        title: `New message from ${senderName}`,
+        message: 'You have a new message',
+      };
+    }
+
+    return {
+      title: fallbackTitle,
+      message: fallbackMessage,
+    };
+  };
+
+  // Load notifications and mark as read when page opens or gains focus
+  useFocusEffect(
+    useCallback(() => {
+      const init = async () => {
+        await loadNotifications();
+        // After loading, mark all as read
+        await markAllAsRead();
+      };
+      init();
+    }, [user, userData])
+  );
+
+  // Subscribe to real-time events while screen is mounted
   useEffect(() => {
     const unsubscribe = RealTimeEventService.subscribe((event) => {
       console.log('📡 [Notifications] Received real-time event:', event);
-
       // Reload notifications when new events arrive
       loadNotifications();
     });
 
     return unsubscribe;
   }, []);
-
-  // Mark all notifications as read when page opens
-  useEffect(() => {
-    if (notifications.length > 0) {
-      markAllAsRead();
-    }
-  }, [notifications.length]);
 
   const loadNotifications = async () => {
     try {
@@ -91,28 +214,30 @@ function NotificationsContent() {
 
       if (response.success && response.data) {
         // Transform API notifications to our interface format
-        const apiNotifications: Notification[] = response.data.notifications.map((n: ApiNotification) => {
-          // Extract type from notification data or use default
-          const notificationType = n.data?.type || n.type || 'system';
+        const apiNotifications: Notification[] = response.data.notifications
+          .filter((n: ApiNotification) => {
+            const t = (n.data as any)?.type || (n as any)?.type;
+            return t !== 'chat_message';
+          })
+          .map((n: ApiNotification) => {
+            // Extract type from notification data or use default
+            const notificationType = n.data?.type || n.type || 'system';
 
-          return {
-            id: n.id.toString(),
-            title: n.title || n.data?.title || 'Notification',
-            message: n.body || n.data?.body || n.data?.message || '',
-            type: notificationType,
-            isRead: !!n.read_at,
-            timestamp: new Date(n.created_at),
-            data: n.data
-          };
-        });
+            const display = deriveDisplayText(n);
 
-        // Filter out chat message notifications
-        const filteredNotifications = apiNotifications.filter(n =>
-          !['message', 'new_message', 'chat_message'].includes(n.type)
-        );
+            return {
+              id: n.id.toString(),
+              title: display.title,
+              message: display.message,
+              type: notificationType,
+              isRead: !!n.read_at,
+              timestamp: new Date(n.created_at),
+              data: n.data
+            };
+          });
 
-        console.log('🔔 Transformed notifications:', apiNotifications.length, 'Filtered:', filteredNotifications.length);
-        setNotifications(filteredNotifications);
+        console.log('🔔 Transformed notifications:', apiNotifications.length);
+        setNotifications(apiNotifications);
       } else {
         console.log('🔔 No notifications found or API error');
         setNotifications([]);
@@ -157,7 +282,7 @@ function NotificationsContent() {
           onPress: async () => {
             try {
               // Call API to delete from backend
-              await notificationApiService.deleteNotification(parseInt(notificationId));
+              await notificationApiService.deleteNotification(notificationId);
               // Update local state
               setNotifications(prev =>
                 prev.filter(notification => notification.id !== notificationId)

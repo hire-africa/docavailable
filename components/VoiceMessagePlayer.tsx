@@ -329,7 +329,11 @@ export default function VoiceMessagePlayer({
 
   if (isLoading) {
     return (
-      <View style={[styles.container, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
+      <View style={[
+        styles.container,
+        isOwnMessage ? styles.ownMessage : styles.otherMessage,
+        { flexDirection: isOwnMessage ? 'row-reverse' : 'row' }
+      ]}>
         <ActivityIndicator size="small" color={isOwnMessage ? "#fff" : "#4CAF50"} />
         <Text style={[styles.loadingText, { color: isOwnMessage ? "#fff" : "#666" }]}>
           Loading voice message...
@@ -341,20 +345,26 @@ export default function VoiceMessagePlayer({
   // Show error if load failed OR if sound is null after loading completes
   if (loadError || (!sound && !isLoading)) {
     return (
-      <View style={[styles.container, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
-        <View style={styles.profilePictureContainer}>
-          {profilePictureUrl ? (
-            <Image
-              source={{ uri: profilePictureUrl }}
-              style={styles.profilePicture}
-              onError={() => { }}
-            />
-          ) : (
-            <View style={styles.profilePictureFallback}>
-              <Ionicons name="person" size={16} color={isOwnMessage ? "#fff" : "#666"} />
-            </View>
-          )}
-        </View>
+      <View style={[
+        styles.container,
+        isOwnMessage ? styles.ownMessage : styles.otherMessage,
+        { flexDirection: isOwnMessage ? 'row-reverse' : 'row' }
+      ]}>
+        {!isOwnMessage && (
+          <View style={styles.profilePictureContainer}>
+            {profilePictureUrl ? (
+              <Image
+                source={{ uri: profilePictureUrl }}
+                style={styles.profilePicture}
+                onError={() => { }}
+              />
+            ) : (
+              <View style={styles.profilePictureFallback}>
+                <Ionicons name="person" size={16} color="#666" />
+              </View>
+            )}
+          </View>
+        )}
         <View style={styles.contentContainer}>
           <View style={styles.topRow}>
             <View style={styles.microphoneContainer}>
@@ -386,26 +396,32 @@ export default function VoiceMessagePlayer({
   }
 
   return (
-    <View style={[styles.container, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
-      {/* Profile Picture */}
-      <View style={styles.profilePictureContainer}>
-        {profilePictureUrl ? (
-          <Image
-            source={{ uri: profilePictureUrl }}
-            style={styles.profilePicture}
-            onError={() => {
-              // console.log('VoiceMessagePlayer: Profile picture failed to load, showing fallback');
-            }}
-            onLoad={() => {
-              // console.log('VoiceMessagePlayer: Profile picture loaded successfully:', profilePictureUrl);
-            }}
-          />
-        ) : (
-          <View style={styles.profilePictureFallback}>
-            <Ionicons name="person" size={16} color={isOwnMessage ? "#fff" : "#666"} />
-          </View>
-        )}
-      </View>
+    <View style={[
+      styles.container,
+      isOwnMessage ? styles.ownMessage : styles.otherMessage,
+      { flexDirection: isOwnMessage ? 'row-reverse' : 'row' }
+    ]}>
+      {/* Profile Picture - Only show for others */}
+      {!isOwnMessage && (
+        <View style={styles.profilePictureContainer}>
+          {profilePictureUrl ? (
+            <Image
+              source={{ uri: profilePictureUrl }}
+              style={styles.profilePicture}
+              onError={() => {
+                // console.log('VoiceMessagePlayer: Profile picture failed to load, showing fallback');
+              }}
+              onLoad={() => {
+                // console.log('VoiceMessagePlayer: Profile picture loaded successfully:', profilePictureUrl);
+              }}
+            />
+          ) : (
+            <View style={styles.profilePictureFallback}>
+              <Ionicons name="person" size={16} color="#666" />
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Main Content Container */}
       <View style={styles.contentContainer}>
@@ -482,7 +498,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 20,
     maxWidth: '85%',
-    minHeight: 70,
+    minHeight: 50,
   },
   ownMessage: {
     backgroundColor: '#4CAF50', // Match the bubble green color
@@ -493,7 +509,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   profilePictureContainer: {
-    marginRight: 8,
+    marginHorizontal: 4,
   },
   profilePicture: {
     width: 32,

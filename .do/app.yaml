@@ -60,6 +60,15 @@ workers:
         type: SECRET
       - key: DB_CONNECTION
         value: pgsql
+      - key: LIVEKIT_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: LIVEKIT_API_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: LIVEKIT_API_SECRET
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
     instance_count: 1
     instance_size_slug: basic-xxs
 

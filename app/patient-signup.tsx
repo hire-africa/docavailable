@@ -123,6 +123,7 @@ const Step1: React.FC<Step1Props> = ({
 }) => {
     const genderOptions = ['Male', 'Female', 'Other'];
     const [isUploading, setIsUploading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleIdUpload = async () => {
         console.log('handleIdUpload called, idType:', idType);
@@ -358,15 +359,27 @@ const Step1: React.FC<Step1Props> = ({
                 )}
 
                 <Text style={styles.inputLabel}>Password</Text>
-                <TextInput
-                    ref={fieldRefs.password}
-                    style={[styles.input, errors.password && styles.inputError]}
-                    placeholder="Create a secure password"
-                    placeholderTextColor="#999"
-                    secureTextEntry
-                    value={password}
-                    onChangeText={setPassword}
-                />
+                <View style={[styles.passwordContainer, errors.password && styles.inputError]}>
+                    <TextInput
+                        ref={fieldRefs.password}
+                        style={styles.passwordInput}
+                        placeholder="Create a secure password"
+                        placeholderTextColor="#999"
+                        secureTextEntry={!showPassword}
+                        value={password}
+                        onChangeText={setPassword}
+                    />
+                    <TouchableOpacity
+                        style={styles.eyeButton}
+                        onPress={() => setShowPassword(!showPassword)}
+                    >
+                        <FontAwesome
+                            name={showPassword ? "eye-slash" : "eye"}
+                            size={20}
+                            color="#999"
+                        />
+                    </TouchableOpacity>
+                </View>
                 {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
             </View>
 
@@ -1569,6 +1582,27 @@ const styles = StyleSheet.create({
     },
     inputError: {
         borderColor: '#4CAF50',
+    },
+    passwordContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: 56,
+        borderWidth: 2,
+        borderColor: '#E0E0E0',
+        borderRadius: 16,
+        backgroundColor: '#FFFFFF',
+        marginBottom: 8,
+    },
+    passwordInput: {
+        flex: 1,
+        height: '100%',
+        paddingHorizontal: 20,
+        fontSize: 16,
+        color: '#000',
+    },
+    eyeButton: {
+        paddingRight: 15,
+        justifyContent: 'center',
     },
     genderContainer: {
         flexDirection: 'row',

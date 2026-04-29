@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChatConfig, ChatEvents, ChatMessage } from '../types/chat';
+import { validateMessage } from '../utils/messageSanitization';
 import { imageService } from './imageService';
 import { mediaUploadQueueService } from './mediaUploadQueueService';
 import { SecureWebSocketService } from './secureWebSocketService';
@@ -70,7 +71,23 @@ export class WebRTCChatService {
   // Add message and save to storage
   private async addMessage(message: ChatMessage): Promise<void> {
     // Check if message already exists to prevent duplicates
-    const existingMessage = this.messages.find(msg => msg.id === message.id);
+    // Compare IDs as strings to handle number vs string mismatches
+    const msgId = String(message.id);
+    const msgTempId = message.temp_id ? String(message.temp_id) : null;
+    const existingMessage = this.messages.find(msg => {
+      // Match by ID (normalized to string)
+      if (String(msg.id) === msgId) return true;
+      // Match by temp_id
+      if (msgTempId && msg.temp_id && String(msg.temp_id) === msgTempId) return true;
+      if (msgTempId && String(msg.id) === msgTempId) return true;
+      if (msg.temp_id && String(msg.temp_id) === msgId) return true;
+      // Content-based dedup: same sender + same message text + same timestamp
+      if (msg.message === message.message &&
+        String(msg.sender_id) === String(message.sender_id) &&
+        msg.created_at && message.created_at &&
+        msg.created_at === message.created_at) return true;
+      return false;
+    });
     if (existingMessage) {
       console.log('⚠️ [WebRTCChat] Message already exists, skipping duplicate:', message.id);
       return;
@@ -117,7 +134,6 @@ export class WebRTCChatService {
         // Use SecureWebSocketService with production URL
         this.secureWebSocket = new SecureWebSocketService({
           url: wsUrl,
-          ignoreSSLErrors: true,
           onOpen: async () => {
             clearTimeout(connectionTimeoutId);
             console.log('✅ [WebRTCChat] WebRTC chat connected successfully');
@@ -148,9 +164,8 @@ export class WebRTCChatService {
 
             resolve();
           },
-          onMessage: async (event: MessageEvent) => {
+          onMessage: async (data: any) => {
             try {
-              const data = JSON.parse(event.data);
               console.log('📨 [WebRTCChat] Message received:', data.type);
 
               if (data.type === 'chat-message') {
@@ -162,6 +177,7 @@ export class WebRTCChatService {
                   message: raw.message || raw.content || '',
                   message_type: (raw.message_type || raw.messageType || 'text'),
                   media_url: raw.media_url || raw.mediaUrl,
+                  temp_id: raw.temp_id || raw.tempId,
                   created_at: raw.created_at || raw.createdAt || new Date().toISOString(),
                   delivery_status: (raw.delivery_status || raw.deliveryStatus || 'delivered')
                 };
@@ -180,10 +196,29 @@ export class WebRTCChatService {
                   }
                   this.events.onMessage(normalized);
                 }
+              } else if (data.type === 'delivery-status' || data.type === 'read-receipt') {
+                const messageId = String(data.messageId);
+                const status = data.type === 'read-receipt' ? 'read' : data.status;
+
+                console.log(`📊 [WebRTCChat] Received status update: ${messageId} -> ${status}`);
+
+                // Update local message status
+                const messageIndex = this.messages.findIndex(m => String(m.id) === messageId || (m.temp_id && String(m.temp_id) === messageId));
+                if (messageIndex !== -1) {
+                  this.messages[messageIndex].delivery_status = status;
+                  await this.saveMessages();
+                  this.events.onMessage(this.messages[messageIndex]);
+                }
               } else if (data.type === 'typing-indicator') {
                 this.onTypingIndicator?.(data.isTyping, data.senderId);
               } else if (data.type === 'session-ended') {
                 this.events.onSessionEnded?.(this.config.appointmentId, data.reason || 'manual_end', this.config.sessionType || 'appointment');
+              } else if (data.type === 'doctor-response-timer-started' ||
+                data.type === 'doctor-response-timer-stopped' ||
+                data.type === 'session-activated' ||
+                data.type === 'session-status-response') {
+                console.log(`⏱️ [WebRTCChat] Received detector message: ${data.type}`);
+                this.events.onDetectorMessage?.(data);
               }
             } catch (error) {
               console.error('❌ Error parsing message:', error);
@@ -222,8 +257,8 @@ export class WebRTCChatService {
     });
   }
 
-  async sendMessage(message: string, replyTo?: { messageId: string; message: string; senderName: string }): Promise<ChatMessage | null> {
-    console.log('📤 [WebRTCChat] sendMessage called with:', message, 'replyTo:', replyTo);
+  async sendMessage(message: string, replyTo?: { messageId: string; message: string; senderName: string }, preferredId?: string): Promise<ChatMessage | null> {
+    console.log('📤 [WebRTCChat] sendMessage called with:', message, 'replyTo:', replyTo, 'preferredId:', preferredId);
     console.log('📤 [WebRTCChat] Connection status:', {
       isConnected: this.isConnected,
       hasWebSocket: !!this.websocket,
@@ -251,8 +286,8 @@ export class WebRTCChatService {
       throw new Error('WebRTC chat not connected');
     }
 
-    // Generate a more unique message ID
-    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Use preferred ID (from UI) or generate a new one
+    const messageId = preferredId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     const messageData: any = {
       type: 'chat-message',
@@ -308,6 +343,7 @@ export class WebRTCChatService {
       // Convert to ChatMessage format for storage
       const chatMessage: ChatMessage = {
         id: messageId,
+        temp_id: messageId, // Use the same ID as temp_id for local reconciliation
         sender_id: Number(this.config.userId),
         sender_name: this.config.userName,
         message: message,
@@ -376,14 +412,9 @@ export class WebRTCChatService {
         console.error('❌ [WebRTCChat] Failed to persist message to backend - timer may not start!', persistErr);
       }
 
-      // Trigger the onMessage event so the sender can see their own message immediately
-      console.log('📤 [WebRTCChat] Triggering onMessage event for sent message:', messageId);
-      if (this.events.onMessage) {
-        this.events.onMessage(chatMessage);
-        console.log('✅ [WebRTCChat] onMessage event triggered successfully for:', messageId);
-      } else {
-        console.error('❌ [WebRTCChat] onMessage function is not defined!');
-      }
+      // Note: We no longer trigger onMessage for the sender's own message here
+      // because the UI adds it immediately and we return it from this function.
+      // This prevents the "appears twice" flash during sending.
 
       console.log('📤 [WebRTCChat] Message sent successfully:', messageId);
       return chatMessage;
@@ -895,22 +926,52 @@ export class WebRTCChatService {
         // Simple merge: prefer server messages but keep local-only messages (like ones currently sending)
         const merged = [...serverMessages];
 
-        // Add local messages that are NOT in the server set (match by id or temp_id)
+        // Add local messages that are NOT in the server set
+        // Use multiple matching strategies to prevent duplicates
         this.messages.forEach(localMsg => {
-          const exists = merged.some(m => m.id === localMsg.id || (localMsg.temp_id && m.temp_id === localMsg.temp_id));
+          const localId = String(localMsg.id);
+          const localTempId = localMsg.temp_id ? String(localMsg.temp_id) : null;
+          const exists = merged.some(m => {
+            const serverId = String(m.id);
+            const serverTempId = m.temp_id ? String(m.temp_id) : null;
+            // Match by ID (normalized to string)
+            if (serverId === localId) return true;
+            // Match by temp_id cross-references
+            if (localTempId && serverTempId && localTempId === serverTempId) return true;
+            if (localTempId && serverId === localTempId) return true;
+            if (serverTempId && localId === serverTempId) return true;
+            // Content-based dedup: same sender + same message + same timestamp
+            if (m.message === localMsg.message &&
+              String(m.sender_id) === String(localMsg.sender_id) &&
+              m.created_at && localMsg.created_at &&
+              m.created_at === localMsg.created_at) return true;
+            return false;
+          });
           if (!exists) {
+            // Only keep local messages that are genuinely not on the server
+            // (e.g., messages still being sent)
             merged.push(localMsg);
           }
         });
 
+        // Final dedup pass: remove any remaining duplicates by content fingerprint
+        const seen = new Set<string>();
+        const deduped = merged.filter(msg => {
+          // Create a fingerprint from sender + message + timestamp
+          const fingerprint = `${String(msg.sender_id)}_${msg.message}_${msg.created_at || ''}`;
+          if (seen.has(fingerprint)) return false;
+          seen.add(fingerprint);
+          return true;
+        });
+
         // Sort by timestamp (fallback to current time if invalid)
-        merged.sort((a, b) => {
+        deduped.sort((a, b) => {
           const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
           const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
           return timeA - timeB;
         });
 
-        this.messages = merged;
+        this.messages = deduped;
       } else {
         // If server is empty and local is empty, just set to empty
         this.messages = serverMessages;
@@ -1116,6 +1177,45 @@ export class WebRTCChatService {
     this.onTypingIndicator = callback;
   }
 
+  // Send delivery status update
+  sendDeliveryStatus(messageId: string | number, status: 'delivered' | 'read' = 'delivered'): void {
+    if (!this.websocket || !this.isConnected) return;
+
+    try {
+      const message = {
+        type: 'delivery-status',
+        appointmentId: this.config.appointmentId,
+        messageId: String(messageId),
+        status: status,
+        senderId: this.config.userId
+      };
+
+      console.log('📊 [WebRTCChat] Sending delivery status:', message);
+      this.websocket.send(JSON.stringify(message));
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Failed to send delivery status:', error);
+    }
+  }
+
+  // Send read receipt
+  sendReadReceipt(messageId: string | number): void {
+    if (!this.websocket || !this.isConnected) return;
+
+    try {
+      const message = {
+        type: 'read-receipt',
+        appointmentId: this.config.appointmentId,
+        messageId: String(messageId),
+        senderId: this.config.userId
+      };
+
+      console.log('📊 [WebRTCChat] Sending read receipt:', message);
+      this.websocket.send(JSON.stringify(message));
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Failed to send read receipt:', error);
+    }
+  }
+
   // Get auth token for API calls
   private async getAuthToken(): Promise<string> {
     try {
@@ -1133,12 +1233,13 @@ export class WebRTCChatService {
     const content = message.content || message.message || '';
     const senderId = message.senderId || message.sender_id || '';
     const timestamp = message.createdAt || message.created_at || message.timestamp || '';
+    const tempId = message.tempId || message.temp_id || '';
 
-    // Create a hash based on content, sender, and timestamp (rounded to nearest minute to handle small time differences)
-    const timeRounded = new Date(timestamp).setSeconds(0, 0).toString();
-    const hash = `${senderId}_${content}_${timeRounded}`;
+    // Create a precise hash based on content, sender, timestamp and tempId
+    // High-precision timestamp (ISO string) is used to avoid collisions while keeping echoes matched
+    const hash = `hash_${senderId}_${content.substring(0, 50)}_${timestamp}_${tempId}`;
 
-    console.log('🔍 [WebRTCChat] Created message hash:', hash, 'for message:', message.tempId || message.id);
+    console.log('🔍 [WebRTCChat] Created high-precision message hash:', hash, 'for message:', tempId || message.id);
     return hash;
   }
 

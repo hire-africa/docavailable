@@ -27,6 +27,7 @@ class MainApplication : Application(), ReactApplication {
             // packages.add(MyReactNativePackage())
             packages.add(IncomingCallPackage())
             packages.add(ScreenshotPreventionPackage())
+            packages.add(SettingsPackage())
             return packages
           }
 

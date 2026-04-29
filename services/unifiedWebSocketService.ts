@@ -228,7 +228,8 @@ export class UnifiedWebSocketService {
     this.heartbeatInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         try {
-          this.ws.ping();
+          // Use a regular JSON message instead of ws.ping() which is not supported in React Native
+          this.ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
           console.log('🏓 [UnifiedWebSocket] Heartbeat sent');
         } catch (error) {
           console.error('❌ [UnifiedWebSocket] Error sending heartbeat:', error);

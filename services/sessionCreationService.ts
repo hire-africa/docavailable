@@ -13,8 +13,8 @@
  * to the existing implementation.
  */
 
-import { environment } from '../config/environment';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { environment } from '../config/environment';
 
 export type SessionType = 'text' | 'call';
 export type CallType = 'voice' | 'video';
@@ -149,11 +149,28 @@ export async function createSession(params: CreateSessionParams): Promise<Create
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         body: JSON.stringify(requestBody),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error('❌ [SessionCreationService] Text session creation failed (Invalid JSON):', {
+          status: response.status,
+          responseText: responseText.substring(0, 500),
+        });
+
+        return {
+          success: false,
+          status: response.status,
+          message: `Server returned invalid JSON (${response.status}). Please check backend logs.`,
+          body: responseText,
+        };
+      }
 
       if (!response.ok) {
         console.error('❌ [SessionCreationService] Text session creation failed:', {
@@ -208,7 +225,7 @@ export async function createSession(params: CreateSessionParams): Promise<Create
         : `direct_session_${Date.now()}`;
 
       const requestBody: any = {
-        call_type: callType === 'audio' ? 'voice' : callType, // Backend expects 'voice' not 'audio'
+        call_type: callType === 'voice' || (callType as string) === 'audio' ? 'voice' : callType, // Backend expects 'voice' not 'audio'
         appointment_id: appointmentId,
       };
       
@@ -235,11 +252,28 @@ export async function createSession(params: CreateSessionParams): Promise<Create
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         body: JSON.stringify(requestBody),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error('❌ [SessionCreationService] Call session creation failed (Invalid JSON):', {
+          status: response.status,
+          responseText: responseText.substring(0, 500),
+        });
+
+        return {
+          success: false,
+          status: response.status,
+          message: `Server returned invalid JSON (${response.status}). Please check backend logs.`,
+          body: responseText,
+        };
+      }
 
       if (!response.ok) {
         const errorMsg = data.message || 'Failed to start call session';

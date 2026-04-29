@@ -1,15 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Image,
-    Modal,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Animated,
+  Dimensions,
+  Image,
+  Modal,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useCallSetup } from '../hooks/useCallSetup';
 
@@ -66,7 +66,8 @@ export default function VideoCallModal({
     isInitializing: hookIsInitializing,
     isRinging: hookIsRinging,
     localStream,
-    endCall
+    endCall,
+    declineCall
   } = useCallSetup({
     appointmentId,
     userId,
@@ -80,7 +81,7 @@ export default function VideoCallModal({
       },
       onCallEnded: onEndCall,
       onCallTimeout: onCallTimeout,
-      onCallRejected: onCallRejected,
+      onCallRejected: (rejectedBy?: string) => onCallRejected?.(),
       onStateChange: (state) => {
         setIsInitializing(state.connectionState === 'connecting');
         setIsRinging(state.connectionState === 'connecting');
@@ -120,9 +121,32 @@ export default function VideoCallModal({
     onCallAnswered?.();
   };
 
-  const handleRejectCall = () => {
+  const handleRejectCall = async () => {
+    // 1. Hit backend to record decline
+    try {
+      const { environment } = await import('../config/environment');
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      const token = await AsyncStorage.getItem('auth_token');
+
+      await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/decline`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          appointment_id: appointmentId,
+          caller_id: userId,
+        }),
+      });
+      console.log('📝 Call decline recorded in backend');
+    } catch (e) {
+      console.error('❌ Failed to record decline in DB:', e);
+    }
+
+    // 2. End session with context
+    await declineCall(isDoctor);
     onRejectCall?.();
-    onCallRejected?.();
     onEndCall();
   };
 
@@ -159,7 +183,7 @@ export default function VideoCallModal({
               <Text style={styles.callerName}>{doctorName}</Text>
               <Text style={styles.callStatus}>Incoming Video Call</Text>
             </View>
-            
+
             <View style={styles.actionButtons}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.rejectButton]}
@@ -167,7 +191,7 @@ export default function VideoCallModal({
               >
                 <Ionicons name="call" size={30} color="#fff" />
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[styles.actionButton, styles.acceptButton]}
                 onPress={handleAcceptCall}
@@ -186,14 +210,14 @@ export default function VideoCallModal({
     <Modal visible={true} animationType="fade">
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
-        
+
         {/* Remote video stream */}
         <View style={styles.remoteVideoContainer}>
           <Text style={styles.remoteVideoPlaceholder}>
             Remote Video Stream
           </Text>
         </View>
-        
+
         {/* Local video stream */}
         {localStream && (
           <View style={styles.localVideoContainer}>
@@ -202,7 +226,7 @@ export default function VideoCallModal({
             </Text>
           </View>
         )}
-        
+
         {/* Call info overlay */}
         <View style={styles.callInfoOverlay}>
           <Text style={styles.callerName}>{doctorName}</Text>
@@ -213,7 +237,7 @@ export default function VideoCallModal({
             {Math.floor(callDuration / 60)}:{(callDuration % 60).toString().padStart(2, '0')}
           </Text>
         </View>
-        
+
         {/* Control buttons */}
         <View style={styles.controlButtons}>
           <TouchableOpacity
@@ -222,28 +246,28 @@ export default function VideoCallModal({
           >
             <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="#fff" />
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.controlButton, isVideoEnabled && styles.activeButton]}
             onPress={handleVideoToggle}
           >
             <Ionicons name={isVideoEnabled ? "videocam" : "videocam-off"} size={24} color="#fff" />
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.controlButton, styles.endCallButton]}
             onPress={handleEndCall}
           >
             <Ionicons name="call" size={24} color="#fff" />
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.controlButton, isFrontCamera && styles.activeButton]}
             onPress={handleCameraFlip}
           >
             <Ionicons name="camera-reverse" size={24} color="#fff" />
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.controlButton, isSpeakerOn && styles.activeButton]}
             onPress={handleSpeakerToggle}

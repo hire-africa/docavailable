@@ -1,11 +1,11 @@
 import {
-    Dimensions,
-    Modal,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Dimensions,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { getOnboardingMessage } from '../utils/profileUtils';
 import { Icon } from './Icon';
@@ -21,13 +21,13 @@ interface OnboardingOverlayProps {
   showDismiss?: boolean;
 }
 
-export default function OnboardingOverlay({ 
-  visible, 
-  userType, 
-  missingFields, 
-  onComplete, 
+export default function OnboardingOverlay({
+  visible,
+  userType,
+  missingFields,
+  onComplete,
   onDismiss,
-  showDismiss = true 
+  showDismiss = true
 }: OnboardingOverlayProps) {
   if (!visible) return null;
 
@@ -39,24 +39,24 @@ export default function OnboardingOverlay({
         <View style={styles.card}>
           <View style={styles.header}>
             <View style={styles.iconContainer}>
-              <Icon 
-                name={userType === 'doctor' ? 'user-md' : userType === 'admin' ? 'cog' : 'user'} 
-                size={32} 
-                color="#4CAF50" 
+              <Icon
+                name={userType === 'doctor' ? 'user-md' : userType === 'admin' ? 'cog' : 'user'}
+                size={32}
+                color="#4CAF50"
               />
             </View>
             <Text style={styles.title}>Complete Your Profile</Text>
           </View>
-          
+
           <Text style={styles.message}>{message}</Text>
-          
+
           <View style={styles.missingSection}>
             <Text style={styles.missingTitle}>Missing Information:</Text>
             {missingFields.map((field, index) => (
               <Text key={index} style={styles.missingField}>• {field}</Text>
             ))}
           </View>
-          
+
           <View style={styles.buttons}>
             <TouchableOpacity style={styles.completeButton} onPress={onComplete}>
               <Text style={styles.completeButtonText}>Complete Profile</Text>

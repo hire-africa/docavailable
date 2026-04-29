@@ -1,21 +1,18 @@
 import { FontAwesome } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Modal,
     Platform,
     ScrollView,
     StyleSheet,
-    Switch,
     Text,
-    TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import authService from '../services/authService';
-import onDutyNotificationService from '../services/onDutyNotificationService';
 
 interface WorkingHours {
     [key: string]: {
@@ -28,15 +25,47 @@ interface WorkingHours {
 }
 
 interface DoctorAvailability {
-    isOnline: boolean;
     workingHours: WorkingHours;
     maxPatientsPerDay: number;
+}
+
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function formatTime(date: Date): string {
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+}
+
+function parseTimeToDate(time: string): Date {
+    const match = time.match(TIME_RE);
+    const now = new Date();
+    if (!match) {
+        now.setHours(9, 0, 0, 0);
+        return now;
+    }
+    const hh = Number(match[1]);
+    const mm = Number(match[2]);
+    now.setHours(hh, mm, 0, 0);
+    return now;
+}
+
+function timeToMinutes(time: string): number | null {
+    const match = time.match(TIME_RE);
+    if (!match) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function isValidTimeRange(start: string, end: string): boolean {
+    const s = timeToMinutes(start);
+    const e = timeToMinutes(end);
+    if (s === null || e === null) return false;
+    return s < e;
 }
 
 const WorkingHours: React.FC = () => {
     const { user } = useAuth();
     const [availability, setAvailability] = useState<DoctorAvailability>({
-        isOnline: false,
         workingHours: {
             monday: { enabled: false, slots: [{ start: '09:00', end: '17:00' }] },
             tuesday: { enabled: false, slots: [{ start: '09:00', end: '17:00' }] },
@@ -52,7 +81,12 @@ const WorkingHours: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
-    const [showOnlineModal, setShowOnlineModal] = useState(false);
+    const [activeTimePicker, setActiveTimePicker] = useState<{
+        day: string;
+        index: number;
+        field: 'start' | 'end';
+        temp: Date;
+    } | null>(null);
 
     const days = [
         { key: 'monday', label: 'Monday', icon: 'calendar' as const },
@@ -100,7 +134,6 @@ const WorkingHours: React.FC = () => {
                 console.log('[WorkingHours] Mapped data:', data);
 
                 const newAvailability = {
-                    isOnline: data.is_online || false,
                     workingHours: data.working_hours || availability.workingHours,
                     maxPatientsPerDay: data.max_patients_per_day || 10,
                 };
@@ -130,7 +163,6 @@ const WorkingHours: React.FC = () => {
 
             // Map frontend camelCase to backend snake_case
             const backendData = {
-                is_online: availability.isOnline,
                 working_hours: availability.workingHours,
                 max_patients_per_day: availability.maxPatientsPerDay,
             };
@@ -153,37 +185,6 @@ const WorkingHours: React.FC = () => {
         }
     };
 
-    const toggleOnlineStatus = () => {
-        const newOnlineStatus = !availability.isOnline;
-
-        if (newOnlineStatus) {
-            // Show modal when turning online
-            setShowOnlineModal(true);
-        } else {
-            // Directly toggle off without modal
-            setAvailability(prev => ({
-                ...prev,
-                isOnline: newOnlineStatus,
-            }));
-            // Hide on-duty notification when going offline
-            onDutyNotificationService.hideOnDutyNotification();
-        }
-    };
-
-    const confirmOnlineStatus = () => {
-        setAvailability(prev => ({
-            ...prev,
-            isOnline: true,
-        }));
-        setShowOnlineModal(false);
-        // Show on-duty notification when going online
-        onDutyNotificationService.showOnDutyNotification(user?.first_name || user?.display_name);
-    };
-
-    const cancelOnlineStatus = () => {
-        setShowOnlineModal(false);
-    };
-
     const toggleDay = (day: string) => {
         setAvailability(prev => ({
             ...prev,
@@ -195,6 +196,25 @@ const WorkingHours: React.FC = () => {
                 },
             },
         }));
+    };
+
+    const openTimePicker = (day: string, index: number, field: 'start' | 'end') => {
+        const current = availability.workingHours[day]?.slots?.[index]?.[field] ?? '09:00';
+        setActiveTimePicker({
+            day,
+            index,
+            field,
+            temp: parseTimeToDate(current),
+        });
+    };
+
+    const closeTimePicker = () => {
+        setActiveTimePicker(null);
+    };
+
+    const commitPickedTime = (date: Date) => {
+        if (!activeTimePicker) return;
+        updateTimeSlot(activeTimePicker.day, activeTimePicker.index, activeTimePicker.field, formatTime(date));
     };
 
     const addTimeSlot = (day: string) => {
@@ -286,35 +306,8 @@ const WorkingHours: React.FC = () => {
                     </TouchableOpacity>
                 </View>
                 <Text style={styles.subtitle}>
-                    Manage your online status, working hours, and appointment preferences
+                    Manage your working hours and appointment preferences
                 </Text>
-            </View>
-
-            {/* Online Status Section */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <FontAwesome name="wifi" size={20} color="#4CAF50" />
-                    <Text style={styles.sectionTitle}>Online Status</Text>
-                </View>
-                <View style={styles.onlineStatusCard}>
-                    <View style={styles.onlineStatusInfo}>
-                        <Text style={styles.onlineStatusTitle}>
-                            {availability.isOnline ? 'Online' : 'Offline'}
-                        </Text>
-                        <Text style={styles.onlineStatusDescription}>
-                            {availability.isOnline
-                                ? 'Patients can see you and request instant chats'
-                                : 'You are currently unavailable for instant chats'
-                            }
-                        </Text>
-                    </View>
-                    <Switch
-                        value={availability.isOnline}
-                        onValueChange={toggleOnlineStatus}
-                        trackColor={{ false: '#E0E0E0', true: '#4CAF50' }}
-                        thumbColor={availability.isOnline ? '#fff' : '#f4f3f4'}
-                    />
-                </View>
             </View>
 
 
@@ -344,7 +337,7 @@ const WorkingHours: React.FC = () => {
                     <Text style={styles.sectionTitle}>Working Hours</Text>
                 </View>
                 <Text style={styles.sectionDescription}>
-                    Set your availability for each day of the week. Patients will only be able to book appointments during these hours.
+                    Set your on-duty schedule for each day of the week. During these hours, patients can find you and reach you when you're available.
                 </Text>
 
                 {days.map(({ key, label, icon }) => (
@@ -377,27 +370,79 @@ const WorkingHours: React.FC = () => {
                         {availability.workingHours[key].enabled && (
                             <View style={styles.timeSlotsContainer}>
                                 {availability.workingHours[key].slots.map((slot, index) => (
+                                    (() => {
+                                        const hasValidStart = TIME_RE.test(slot.start);
+                                        const hasValidEnd = TIME_RE.test(slot.end);
+                                        const hasValidRange = hasValidStart && hasValidEnd && isValidTimeRange(slot.start, slot.end);
+
+                                        return (
                                     <View key={index} style={styles.timeSlot}>
                                         <View style={styles.timeInputs}>
                                             <View style={styles.timeInput}>
                                                 <Text style={styles.timeLabel}>Start Time</Text>
-                                                <TextInput
-                                                    style={styles.timePicker}
-                                                    value={slot.start}
-                                                    onChangeText={(value) => updateTimeSlot(key, index, 'start', value)}
-                                                    placeholder="09:00"
-                                                    placeholderTextColor="#999"
-                                                />
+                                                {Platform.OS === 'web' ? (
+                                                    <input
+                                                        type="time"
+                                                        value={slot.start}
+                                                        onChange={e => updateTimeSlot(key, index, 'start', e.target.value)}
+                                                        style={{
+                                                            height: 44,
+                                                            borderColor: !hasValidStart || !hasValidRange ? '#D32F2F' : '#E0E0E0',
+                                                            borderWidth: 1,
+                                                            borderRadius: 10,
+                                                            padding: 10,
+                                                            fontSize: 14,
+                                                            width: '100%',
+                                                            backgroundColor: '#F8F9FA',
+                                                            color: '#000',
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <TouchableOpacity
+                                                        style={[
+                                                            styles.timePickerButton,
+                                                            (!hasValidStart || !hasValidRange) && styles.timePickerButtonError,
+                                                        ]}
+                                                        onPress={() => openTimePicker(key, index, 'start')}
+                                                        activeOpacity={0.7}
+                                                    >
+                                                        <Text style={styles.timePickerButtonText}>{slot.start}</Text>
+                                                        <FontAwesome name="clock-o" size={16} color="#666" />
+                                                    </TouchableOpacity>
+                                                )}
                                             </View>
                                             <View style={styles.timeInput}>
                                                 <Text style={styles.timeLabel}>End Time</Text>
-                                                <TextInput
-                                                    style={styles.timePicker}
-                                                    value={slot.end}
-                                                    onChangeText={(value) => updateTimeSlot(key, index, 'end', value)}
-                                                    placeholder="17:00"
-                                                    placeholderTextColor="#999"
-                                                />
+                                                {Platform.OS === 'web' ? (
+                                                    <input
+                                                        type="time"
+                                                        value={slot.end}
+                                                        onChange={e => updateTimeSlot(key, index, 'end', e.target.value)}
+                                                        style={{
+                                                            height: 44,
+                                                            borderColor: !hasValidEnd || !hasValidRange ? '#D32F2F' : '#E0E0E0',
+                                                            borderWidth: 1,
+                                                            borderRadius: 10,
+                                                            padding: 10,
+                                                            fontSize: 14,
+                                                            width: '100%',
+                                                            backgroundColor: '#F8F9FA',
+                                                            color: '#000',
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <TouchableOpacity
+                                                        style={[
+                                                            styles.timePickerButton,
+                                                            (!hasValidEnd || !hasValidRange) && styles.timePickerButtonError,
+                                                        ]}
+                                                        onPress={() => openTimePicker(key, index, 'end')}
+                                                        activeOpacity={0.7}
+                                                    >
+                                                        <Text style={styles.timePickerButtonText}>{slot.end}</Text>
+                                                        <FontAwesome name="clock-o" size={16} color="#666" />
+                                                    </TouchableOpacity>
+                                                )}
                                             </View>
                                         </View>
                                         {availability.workingHours[key].slots.length > 1 && (
@@ -408,7 +453,12 @@ const WorkingHours: React.FC = () => {
                                                 <FontAwesome name="trash" size={16} color="#FF3B30" />
                                             </TouchableOpacity>
                                         )}
+                                        {!hasValidRange && (
+                                            <Text style={styles.timeRangeError}>Start time must be earlier than end time</Text>
+                                        )}
                                     </View>
+                                        );
+                                    })()
                                 ))}
                                 <TouchableOpacity
                                     style={styles.addSlot}
@@ -438,16 +488,39 @@ const WorkingHours: React.FC = () => {
                         <Text style={styles.settingTitle}>Max Patients Per Day</Text>
                         <Text style={styles.settingDescription}>Limit the number of appointments per day</Text>
                     </View>
-                    <TextInput
-                        style={styles.numberInput}
-                        value={availability.maxPatientsPerDay.toString()}
-                        onChangeText={(value) => setAvailability(prev => ({
-                            ...prev,
-                            maxPatientsPerDay: parseInt(value) || 0
-                        }))}
-                        keyboardType="numeric"
-                        placeholder="10"
-                    />
+                    {Platform.OS === 'web' ? (
+                        <input
+                            type="number"
+                            value={String(availability.maxPatientsPerDay)}
+                            onChange={e => {
+                                const next = Number(e.target.value);
+                                setAvailability(prev => ({
+                                    ...prev,
+                                    maxPatientsPerDay: Number.isFinite(next) ? next : 0,
+                                }));
+                            }}
+                            style={{
+                                height: 44,
+                                borderColor: '#E0E0E0',
+                                borderWidth: 1,
+                                borderRadius: 10,
+                                padding: 10,
+                                fontSize: 16,
+                                width: 96,
+                                textAlign: 'center',
+                                backgroundColor: '#F8F9FA',
+                                color: '#000',
+                            }}
+                        />
+                    ) : (
+                        <TouchableOpacity
+                            style={styles.numberPickerButton}
+                            onPress={() => {}}
+                            activeOpacity={1}
+                        >
+                            <Text style={styles.numberPickerText}>{availability.maxPatientsPerDay}</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
 
@@ -481,43 +554,41 @@ const WorkingHours: React.FC = () => {
                 </TouchableOpacity>
             </View>
 
-            {/* Online Status Confirmation Modal */}
-            <Modal
-                visible={showOnlineModal}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={cancelOnlineStatus}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContainer}>
-                        <View style={styles.modalHeader}>
-                            <View style={styles.modalIconContainer}>
-                                <FontAwesome name="exclamation-triangle" size={24} color="#FF9500" />
-                            </View>
-                            <Text style={styles.modalTitle}>Important Notice</Text>
-                        </View>
-
-                        <Text style={styles.modalMessage}>
-                            Only turn online when you're actively available. Remember to turn off when going offline to avoid account restrictions.
-                        </Text>
-
-                        <View style={styles.modalButtons}>
-                            <TouchableOpacity
-                                style={styles.modalCancelButton}
-                                onPress={cancelOnlineStatus}
-                            >
-                                <Text style={styles.modalCancelText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.modalConfirmButton}
-                                onPress={confirmOnlineStatus}
-                            >
-                                <Text style={styles.modalConfirmText}>I Understand</Text>
+            {Platform.OS !== 'web' && activeTimePicker && (
+                <View style={styles.timePickerOverlay}>
+                    <TouchableOpacity style={styles.timePickerBackdrop} activeOpacity={1} onPress={closeTimePicker} />
+                    <View style={styles.timePickerSheet}>
+                        <View style={styles.timePickerHeader}>
+                            <Text style={styles.timePickerTitle}>Select time</Text>
+                            <TouchableOpacity onPress={closeTimePicker} style={styles.timePickerDoneBtn}>
+                                <Text style={styles.timePickerDoneText}>Done</Text>
                             </TouchableOpacity>
                         </View>
+                        <DateTimePicker
+                            value={activeTimePicker.temp}
+                            mode="time"
+                            display={Platform.OS === 'android' ? 'clock' : 'spinner'}
+                            onChange={(event, selected) => {
+                                if (Platform.OS === 'android') {
+                                    if (event.type === 'dismissed') {
+                                        closeTimePicker();
+                                        return;
+                                    }
+                                    if (selected) commitPickedTime(selected);
+                                    closeTimePicker();
+                                    return;
+                                }
+
+                                if (selected) {
+                                    setActiveTimePicker(prev => prev ? ({ ...prev, temp: selected }) : prev);
+                                    commitPickedTime(selected);
+                                }
+                            }}
+                        />
                     </View>
                 </View>
-            </Modal>
+            )}
+
         </ScrollView>
     );
 };
@@ -525,23 +596,23 @@ const WorkingHours: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F7FA',
+        backgroundColor: '#F4F6F9',
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F5F7FA',
+        backgroundColor: '#F4F6F9',
     },
     loadingText: {
         fontSize: 16,
         color: '#666',
     },
     header: {
-        padding: 20,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E0E0E0',
+        paddingHorizontal: 20,
+        paddingTop: 18,
+        paddingBottom: 14,
+        backgroundColor: '#F4F6F9',
     },
     headerTop: {
         flexDirection: 'row',
@@ -550,34 +621,38 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#000',
+        fontSize: 26,
+        fontWeight: '800',
+        color: '#0B1220',
         flex: 1,
     },
     refreshButton: {
         padding: 8,
-        borderRadius: 8,
-        backgroundColor: '#F8F9FA',
+        borderRadius: 12,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E6EAF0',
     },
     subtitle: {
         fontSize: 16,
-        color: '#666',
+        color: '#5B6472',
         lineHeight: 22,
     },
     section: {
         backgroundColor: '#fff',
         margin: 16,
-        borderRadius: 20,
+        borderRadius: 18,
         padding: 24,
-        shadowColor: '#000',
+        borderWidth: 1,
+        borderColor: '#E6EAF0',
+        shadowColor: '#0B1220',
         shadowOffset: {
             width: 0,
             height: 4,
         },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-        elevation: 4,
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+        elevation: 3,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -586,36 +661,15 @@ const styles = StyleSheet.create({
     },
     sectionTitle: {
         fontSize: 18,
-        fontWeight: 'bold',
-        color: '#000',
+        fontWeight: '800',
+        color: '#0B1220',
         marginLeft: 12,
     },
     sectionDescription: {
         fontSize: 14,
-        color: '#666',
+        color: '#5B6472',
         lineHeight: 20,
         marginBottom: 20,
-    },
-    onlineStatusCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: '#F8F9FA',
-        borderRadius: 12,
-        padding: 16,
-    },
-    onlineStatusInfo: {
-        flex: 1,
-    },
-    onlineStatusTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#000',
-        marginBottom: 4,
-    },
-    onlineStatusDescription: {
-        fontSize: 14,
-        color: '#666',
     },
     statsContainer: {
         flexDirection: 'row',
@@ -625,30 +679,32 @@ const styles = StyleSheet.create({
     },
     statCard: {
         backgroundColor: '#fff',
-        borderRadius: 12,
+        borderRadius: 16,
         padding: 16,
         alignItems: 'center',
         flex: 1,
         marginHorizontal: 4,
-        shadowColor: '#000',
+        borderWidth: 1,
+        borderColor: '#E6EAF0',
+        shadowColor: '#0B1220',
         shadowOffset: {
             width: 0,
             height: 2,
         },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
         elevation: 2,
     },
     statNumber: {
         fontSize: 24,
-        fontWeight: 'bold',
-        color: '#000',
+        fontWeight: '800',
+        color: '#0B1220',
         marginTop: 8,
         marginBottom: 4,
     },
     statLabel: {
         fontSize: 12,
-        color: '#666',
+        color: '#5B6472',
         textAlign: 'center',
     },
     dayContainer: {
@@ -668,7 +724,7 @@ const styles = StyleSheet.create({
         width: 24,
         height: 24,
         borderRadius: 12,
-        backgroundColor: '#E0E0E0',
+        backgroundColor: '#E9EDF3',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
@@ -681,18 +737,17 @@ const styles = StyleSheet.create({
     },
     dayLabel: {
         fontSize: 16,
-        fontWeight: '600',
-        color: '#666',
+        fontWeight: '700',
+        color: '#5B6472',
     },
     dayLabelActive: {
-        color: '#000',
+        color: '#0B1220',
     },
     timeSlotsContainer: {
         marginLeft: 44,
     },
     timeSlot: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         marginBottom: 12,
     },
     timeInputs: {
@@ -705,21 +760,38 @@ const styles = StyleSheet.create({
     },
     timeLabel: {
         fontSize: 12,
-        color: '#666',
+        color: '#5B6472',
         marginBottom: 4,
     },
-    timePicker: {
+    timePickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         borderWidth: 1,
         borderColor: '#E0E0E0',
-        borderRadius: 8,
-        padding: 12,
+        borderRadius: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        backgroundColor: '#F8F9FA',
+        minHeight: 44,
+    },
+    timePickerButtonError: {
+        borderColor: '#D32F2F',
+    },
+    timePickerButtonText: {
         fontSize: 14,
         color: '#000',
-        backgroundColor: '#F8F9FA',
+        fontWeight: '600',
+    },
+    timeRangeError: {
+        color: '#D32F2F',
+        fontSize: 12,
+        marginTop: 6,
+        marginLeft: 0,
     },
     removeSlot: {
         padding: 8,
-        marginLeft: 8,
+        alignSelf: 'flex-end',
     },
     addSlot: {
         flexDirection: 'row',
@@ -728,7 +800,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#4CAF50',
         borderStyle: 'dashed',
-        borderRadius: 8,
+        borderRadius: 12,
         marginTop: 8,
     },
     addSlotText: {
@@ -751,25 +823,31 @@ const styles = StyleSheet.create({
     },
     settingTitle: {
         fontSize: 16,
-        fontWeight: '600',
-        color: '#000',
+        fontWeight: '800',
+        color: '#0B1220',
         marginBottom: 4,
     },
     settingDescription: {
         fontSize: 14,
-        color: '#666',
+        color: '#5B6472',
         lineHeight: 18,
     },
-    numberInput: {
+    numberPickerButton: {
         borderWidth: 1,
         borderColor: '#E0E0E0',
-        borderRadius: 8,
-        padding: 12,
+        borderRadius: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        backgroundColor: '#F8F9FA',
+        width: 96,
+        minHeight: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    numberPickerText: {
         fontSize: 16,
         color: '#000',
-        backgroundColor: '#F8F9FA',
-        width: 80,
-        textAlign: 'center',
+        fontWeight: '600',
     },
     saveSection: {
         padding: 16,
@@ -803,81 +881,52 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginLeft: 8,
     },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+    timePickerOverlay: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+        justifyContent: 'flex-end',
     },
-    modalContainer: {
+    timePickerBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+    },
+    timePickerSheet: {
         backgroundColor: '#fff',
-        borderRadius: 20,
-        padding: 24,
-        width: '100%',
-        maxWidth: 400,
+        paddingTop: 12,
+        paddingBottom: 24,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
         shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 10,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 20,
-        elevation: 10,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        elevation: 6,
     },
-    modalHeader: {
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    modalIconContainer: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#FFF8E1',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#333',
-        textAlign: 'center',
-    },
-    modalMessage: {
-        fontSize: 16,
-        color: '#666',
-        lineHeight: 24,
-        textAlign: 'center',
-        marginBottom: 24,
-    },
-    modalButtons: {
+    timePickerHeader: {
         flexDirection: 'row',
-        gap: 12,
-    },
-    modalCancelButton: {
-        flex: 1,
-        backgroundColor: '#F5F5F5',
-        borderRadius: 12,
-        padding: 16,
         alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingBottom: 12,
     },
-    modalCancelText: {
+    timePickerTitle: {
         fontSize: 16,
-        fontWeight: '600',
-        color: '#666',
+        fontWeight: '700',
+        color: '#000',
     },
-    modalConfirmButton: {
-        flex: 1,
-        backgroundColor: '#4CAF50',
-        borderRadius: 12,
-        padding: 16,
-        alignItems: 'center',
+    timePickerDoneBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
+        backgroundColor: '#F2F4F7',
     },
-    modalConfirmText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#fff',
+    timePickerDoneText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#111',
     },
 });
 

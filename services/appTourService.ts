@@ -206,7 +206,7 @@ export const DOCTOR_TOUR_STEPS: TourStep[] = [
     title: 'Accepted Appointments',
     description: 'Once you accept a booking request, it moves here. This is where all your confirmed appointments will be displayed for easy management.',
     target: 'appointments-accepted-tab',
-    position: 'bottom',
+    position: 'top',
   },
   {
     id: 'messages-tab',

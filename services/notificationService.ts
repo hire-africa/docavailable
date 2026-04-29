@@ -133,48 +133,44 @@ export class NotificationService {
       // Try to get admin notifications from API
       let adminNotifications: Notification[] = [];
       try {
-        console.log('🔔 Fetching admin notifications from docavailable.com...');
+        console.log('🔔 Fetching notifications from backend API...');
 
-        // Add a timeout to the fetch request to prevent hanging
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+        // Use our configured API service to hit the proper local/production backend
+        const { notificationApiService } = await import('./notificationApiService');
+        const response = await notificationApiService.getNotifications(1, 50, false);
 
-        const response = await fetch(`https://docavailable.com/api/notifications?userType=${userType}&userId=${userId || ''}`, {
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
+        if (response && response.success && response.data) {
+          console.log('🔔 Backend API response data:', response.data);
 
-        console.log('🔔 Admin API response status:', response.status);
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log('🔔 Admin API response data:', data);
-
-          if (data.success && data.notifications) {
+          if (response.data.notifications) {
             // Convert API notifications to our format
-            adminNotifications = data.notifications.map((n: any) => {
+            adminNotifications = response.data.notifications.map((n: any) => {
+              const notificationType = n.data?.type || n.type || 'system';
+              let title = n.title || n.data?.title || 'Notification';
+              let message = n.body || n.data?.body || n.data?.message || '';
+
+              if (notificationType === 'chat_message') {
+                title = n.data?.title || (n.data?.sender_name ? `New message from ${n.data?.sender_name}` : 'New Message');
+              }
+
               return {
-                id: n.id,
-                title: n.title,
-                message: n.message,
-                type: n.type,
-                timestamp: new Date(n.timestamp),
-                isRead: n.isRead || false,
-                actionUrl: this.getActionUrlForType(n.type),
-                recipientType: n.recipientType,
-                recipientId: n.recipientId,
+                id: n.id.toString(),
+                title: title,
+                message: message,
+                type: notificationType,
+                timestamp: new Date(n.created_at || n.timestamp),
+                isRead: n.read_at ? true : false,
+                actionUrl: this.getActionUrlForType(notificationType),
+                recipientType: n.recipientType || 'specific',
+                recipientId: n.recipientId || userId,
                 sentBy: n.sentBy
               };
             });
-            console.log('🔔 Admin notifications loaded:', adminNotifications.length);
+            console.log('🔔 Backend notifications loaded:', adminNotifications.length);
           }
         }
       } catch (apiError: any) {
-        if (apiError.name === 'AbortError') {
-          console.log('🔔 Admin API fetch timed out');
-        } else {
-          console.log('🔔 Admin API not available:', apiError.message);
-        }
+        console.log('🔔 Backend API not available:', apiError.message);
       }
 
       // Combine recent local notifications and admin notifications

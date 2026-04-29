@@ -1,20 +1,21 @@
 import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
+import LocationPicker from '../components/LocationPicker';
 import SignUpErrorHandler from '../utils/errorHandler';
+import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
 import ValidationUtils from '../utils/validationUtils';
 
 export default function AdminSignUp() {
@@ -22,12 +23,13 @@ export default function AdminSignUp() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState('');
   const [country, setCountry] = useState('');
   const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
-  
+
   // Create refs for scrolling to errors
   const scrollViewRef = useRef<ScrollView>(null);
   const fieldRefs = createFieldRefs([
@@ -61,14 +63,14 @@ export default function AdminSignUp() {
     const newErrors = ValidationUtils.validateFields(formData, rules);
 
     setErrors(newErrors);
-    
+
     // Scroll to first error if validation fails
     if (Object.keys(newErrors).length > 0) {
       setTimeout(() => {
         scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
       }, 100);
     }
-    
+
     return Object.keys(newErrors).length === 0;
   };
 
@@ -90,7 +92,7 @@ export default function AdminSignUp() {
       formData.append('user_type', 'admin');
 
       await authService.signUp(formData);
-      
+
       Alert.alert(
         'Success!',
         'Your admin account has been created successfully.',
@@ -142,55 +144,54 @@ export default function AdminSignUp() {
             />
             {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
 
-            <TextInput
-              ref={fieldRefs.lastName}
-              style={[styles.input, errors.lastName && styles.inputError]}
-              placeholder="Last Name"
-              placeholderTextColor="#666"
-              value={lastName}
-              onChangeText={setLastName}
+            <LocationPicker
+              country={country}
+              setCountry={setCountry}
+              city={city}
+              setCity={setCity}
+              errors={errors}
+              fieldRefs={fieldRefs}
             />
-            {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
 
-            <TextInput
-              ref={fieldRefs.email}
-              style={[styles.input, errors.email && styles.inputError]}
-              placeholder="Email"
-              placeholderTextColor="#666"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-            />
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
-
-            <TextInput
-              ref={fieldRefs.password}
-              style={[styles.input, errors.password && styles.inputError]}
-              placeholder="Password"
-              placeholderTextColor="#666"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
+            <View style={[styles.passwordContainer, errors.password && styles.inputError]}>
+              <TextInput
+                ref={fieldRefs.password}
+                style={styles.passwordInput}
+                placeholder="Password"
+                placeholderTextColor="#666"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword(!showPassword)}
+              >
+                <FontAwesome
+                  name={showPassword ? "eye-slash" : "eye"}
+                  size={20}
+                  color="#999"
+                />
+              </TouchableOpacity>
+            </View>
             {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
 
-          <TouchableOpacity 
-            style={[styles.signUpButton, loading && styles.signUpButtonDisabled]} 
-            onPress={handleSignUp}
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <ActivityIndicator color="#FFFFFF" size="small" />
-                <Text style={[styles.signUpButtonText, { marginLeft: 8 }]}>
-                  Creating Account...
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.signUpButtonText}>Create Admin Account</Text>
-            )}
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.signUpButton, loading && styles.signUpButtonDisabled]}
+              onPress={handleSignUp}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <Text style={[styles.signUpButtonText, { marginLeft: 8 }]}>
+                    Creating Account...
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.signUpButtonText}>Create Admin Account</Text>
+              )}
+            </TouchableOpacity>
           </View>
 
           <View style={styles.footer}>
@@ -247,6 +248,27 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: '#FF3B30',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 50,
+    borderColor: '#E0E0E0',
+    borderWidth: 1,
+    borderRadius: 12,
+    marginBottom: 16,
+    backgroundColor: '#F8F9FA',
+  },
+  passwordInput: {
+    flex: 1,
+    height: '100%',
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#000',
+  },
+  eyeButton: {
+    paddingRight: 15,
+    justifyContent: 'center',
   },
   errorText: {
     color: '#FF3B30',

@@ -3,6 +3,7 @@ require('dotenv').config();
 module.exports = {
   expo: {
     name: "DocAvailable",
+    owner: "gugugu777",
     slug: "Doc_available",
     version: "1.1.3",
     orientation: "portrait",
@@ -10,7 +11,7 @@ module.exports = {
     userInterfaceStyle: "light",
     runtimeVersion: "1.1.3",
     updates: {
-      url: "https://u.expo.dev/972b5d32-2589-4960-a52d-2dcc6fe53eeb"
+      url: "https://u.expo.dev/690c2d88-6ac8-4ca2-943e-83009e660415"
     },
 
     splash: {
@@ -74,7 +75,7 @@ module.exports = {
     ],
     extra: {
       eas: {
-        projectId: "2166156d-3cb3-4f6e-9cd1-f40471339866"
+        projectId: "690c2d88-6ac8-4ca2-943e-83009e660415"
       },
       googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
       googleClientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,

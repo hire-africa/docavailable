@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppTour from '../../../components/AppTour';
 import AudioCallModal from '../../../components/AudioCallModal';
+import CustomAlertDialog from '../../../components/CustomAlertDialog';
 import DirectBookingModal from '../../../components/DirectBookingModal';
 import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
 import SessionTypeSelectionModal, { SessionType } from '../../../components/SessionTypeSelectionModal';
@@ -50,6 +51,10 @@ interface DoctorProfile {
   profile_picture_url?: string;
   status: string;
   is_online?: boolean;
+  is_available_now?: boolean;
+  is_on_break?: boolean;
+  current_slot_end?: string;
+  next_slot_start?: string;
 }
 
 
@@ -71,12 +76,24 @@ export default function DoctorProfilePage() {
   const [startingSession, setStartingSession] = useState(false);
   // Track if call has been initiated to prevent duplicates
   const [callInitiated, setCallInitiated] = useState(false);
+  // Busy modal state
+  const [showBusyModal, setShowBusyModal] = useState(false);
   // Similar doctors
   const [similarDoctors, setSimilarDoctors] = useState<any[]>([]);
   const [loadingSimilar, setLoadingSimilar] = useState(false);
   // Reviews
   const [reviews, setReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
+
+  const isAvailableNow = !!doctor?.is_available_now;
+  const isOnBreak = !!doctor?.is_on_break;
+  const currentSlotEnd = doctor?.current_slot_end;
+  const nextSlotStart = doctor?.next_slot_start;
+  const availabilityLine = isAvailableNow
+    ? `On Duty${currentSlotEnd ? ` · Shift ends at ${currentSlotEnd}` : ''}`
+    : isOnBreak
+      ? `On Break${currentSlotEnd ? ` · Shift ends at ${currentSlotEnd}` : ''}`
+      : `Off Duty${nextSlotStart ? ` · Next shift starts ${nextSlotStart}` : ''}`;
 
   // Progressive section loading
   const [visibleSections, setVisibleSections] = useState(0);
@@ -172,7 +189,7 @@ export default function DoctorProfilePage() {
           dataKeys: response.data ? Object.keys(response.data) : [],
           data: response.data
         });
-        
+
         if (response.success && response.data) {
           // Backend already returns camelCase, but handle both formats for safety
           const sub = response.data;
@@ -184,14 +201,14 @@ export default function DoctorProfilePage() {
             textSessionsRemaining: sub.textSessionsRemaining ?? sub.text_sessions_remaining ?? 0,
             isActive: sub.isActive ?? sub.is_active ?? false,
           };
-          
+
           console.log('✅ [DoctorProfile] Subscription loaded:', {
             isActive: transformed.isActive,
             voiceCallsRemaining: transformed.voiceCallsRemaining,
             videoCallsRemaining: transformed.videoCallsRemaining,
             textSessionsRemaining: transformed.textSessionsRemaining
           });
-          
+
           setCurrentSubscription(transformed);
         } else {
           const errorMsg = response.message || 'No subscription data received';
@@ -407,7 +424,7 @@ export default function DoctorProfilePage() {
   const handleDirectBookingConfirm = async (reason: string, sessionType: SessionType) => {
     const errorPrefix = '[DoctorProfile]';
     console.log('🎯 [DoctorProfile] handleDirectBookingConfirm called:', { sessionType, doctor: !!doctor, userData: !!userData });
-    
+
     if (!doctor || !userData) {
       const errorMsg = !doctor ? 'Doctor information is missing' : 'User information is missing';
       console.error(`❌ ${errorPrefix} ${errorMsg}`);
@@ -428,7 +445,7 @@ export default function DoctorProfilePage() {
 
       // Use the reusable session creation service
       const { createSession } = await import('../../../services/sessionCreationService');
-      
+
       const result = await createSession({
         type: sessionType === 'text' ? 'text' : 'call',
         doctorId: doctor.id,
@@ -438,13 +455,20 @@ export default function DoctorProfilePage() {
       });
 
       if (!result.success) {
-        const errorMsg = result.message || 'Failed to create session';
+        const errorMsg = ('message' in result && (result as any).message)
+          ? String((result as any).message)
+          : 'Failed to create session';
         console.error(`❌ ${errorPrefix} Session creation failed:`, errorMsg);
-        Alert.alert(
-          'Session Creation Failed',
-          `${errorMsg}\n\nStatus: ${result.status || 'Unknown'}\n\nPlease check your subscription and try again.`,
-          [{ text: 'OK' }]
-        );
+
+        if (errorMsg.includes('Doctor is currently in another session')) {
+          setShowBusyModal(true);
+        } else {
+          Alert.alert(
+            'Session Creation Failed',
+            `${errorMsg}\n\nStatus: ${('status' in result && (result as any).status) ? String((result as any).status) : 'Unknown'}\n\nPlease check your subscription and try again.`,
+            [{ text: 'OK' }]
+          );
+        }
         setStartingSession(false);
         setCallInitiated(false);
         return;
@@ -472,14 +496,14 @@ export default function DoctorProfilePage() {
           setCallInitiated(false);
           return;
         }
-        
+
         // For audio/video, reuse the same call flow used in Chat by opening the call modals directly
         const appointmentId = result.appointmentId;
         const isDirectSession = appointmentId.startsWith('direct_session_');
         console.log(`📞 [DoctorProfile] Opening ${sessionType} call modal:`, {
           appointmentId,
           isDirectSession,
-          note: isDirectSession 
+          note: isDirectSession
             ? '⚠️ Direct session - this is a CallSession routing ID, NOT an appointment ID. No appointment record exists.'
             : 'Scheduled appointment - appointment record exists.',
           resultKeys: Object.keys(result),
@@ -500,11 +524,11 @@ export default function DoctorProfilePage() {
         console.log('📞 [DoctorProfile] Setting up call modal with routing ID:', {
           routingId: appointmentId,
           isDirectSession: appointmentId.startsWith('direct_session_'),
-          note: appointmentId.startsWith('direct_session_') 
+          note: appointmentId.startsWith('direct_session_')
             ? '⚠️ This is a CallSession routing ID, NOT an appointment ID. No appointment record exists.'
             : 'This is a scheduled appointment ID - appointment record exists.'
         });
-        
+
         // Ensure appointmentId (routing ID) and doctorId are valid before proceeding
         if (!appointmentId) {
           const errorMsg = 'Invalid appointment ID received from server';
@@ -518,7 +542,7 @@ export default function DoctorProfilePage() {
           setCallInitiated(false);
           return;
         }
-        
+
         if (!doctor?.id) {
           const errorMsg = 'Doctor ID is missing';
           console.error(`❌ ${errorPrefix} ${errorMsg}`);
@@ -531,23 +555,13 @@ export default function DoctorProfilePage() {
           setCallInitiated(false);
           return;
         }
-        
-        console.log('✅ [DoctorProfile] All validations passed, opening call modal:', {
-          appointmentId,
-          doctorId: doctor.id,
-          sessionType
-        });
-        
+
         setDirectSessionId(appointmentId);
         if (sessionType === 'audio') {
-          console.log('🎤 [DoctorProfile] Setting showAudioCallModal to true');
           setShowAudioCallModal(true);
         } else {
-          console.log('📹 [DoctorProfile] Setting showVideoCallModal to true');
           setShowVideoCallModal(true);
         }
-        
-        console.log('✅ Call modal opened for session:', appointmentId);
       }
     } catch (error: any) {
       const errorMsg = error?.message || 'Unknown error occurred';
@@ -558,7 +572,7 @@ export default function DoctorProfilePage() {
         details: errorDetails,
         stack: error?.stack
       });
-      
+
       // Show detailed error to user
       const userMessage = error?.response?.data?.message || errorMsg;
       const statusCode = error?.response?.status || error?.status || 'Unknown';
@@ -567,7 +581,7 @@ export default function DoctorProfilePage() {
         `Failed to start ${sessionType} session.\n\nError: ${userMessage}\nStatus: ${statusCode}\n\nPlease check your connection and try again.`,
         [{ text: 'OK' }]
       );
-      
+
       // Reset flags on error so user can retry
       setCallInitiated(false);
     } finally {
@@ -648,8 +662,6 @@ export default function DoctorProfilePage() {
       </View>
     );
   }
-
-  const isOnline = doctor.is_online || false;
 
   return (
     <View style={styles.container}>
@@ -733,9 +745,9 @@ export default function DoctorProfilePage() {
               )}
 
               <View style={styles.statusContainer}>
-                <View style={[styles.statusDot, { backgroundColor: isOnline ? '#4CAF50' : '#999' }]} />
-                <Text style={[styles.statusText, { color: isOnline ? '#4CAF50' : '#999' }]}>
-                  {isOnline ? 'Online Now' : 'Offline'}
+                <View style={[styles.statusDot, { backgroundColor: isAvailableNow ? '#4CAF50' : isOnBreak ? '#F4C430' : '#999' }]} />
+                <Text style={[styles.statusText, { color: isAvailableNow ? '#4CAF50' : isOnBreak ? '#F4C430' : '#999' }]}>
+                  {availabilityLine}
                 </Text>
               </View>
             </View>
@@ -879,18 +891,17 @@ export default function DoctorProfilePage() {
             <TouchableOpacity
               style={[
                 styles.directBookingButton,
-                !isOnline && styles.directBookingButtonDisabled
+                !isAvailableNow && styles.directBookingButtonDisabled
               ]}
               onPress={handleDirectBooking}
-              disabled={!isOnline}
+              disabled={!isAvailableNow}
               ref={tourRefs['talk-now-btn']}
-              collapsable={false}
             >
               <Text style={[
                 styles.directBookingButtonText,
-                !isOnline && styles.directBookingButtonTextDisabled
+                !isAvailableNow && styles.directBookingButtonTextDisabled
               ]}>
-                {isOnline ? 'Talk Now' : 'Talk Now (Offline)'}
+                {isAvailableNow ? 'Talk Now' : 'Talk Now (Not Available)'}
               </Text>
             </TouchableOpacity>
 
@@ -898,7 +909,6 @@ export default function DoctorProfilePage() {
               style={styles.bookAppointmentButton}
               onPress={handleBookAppointment}
               ref={tourRefs['book-appt-btn']}
-              collapsable={false}
             >
               <Text style={styles.bookAppointmentButtonText}>Book Appointment</Text>
             </TouchableOpacity>
@@ -1093,7 +1103,7 @@ export default function DoctorProfilePage() {
               setCallInitiated(false); // Reset flag on timeout
             }}
             onCallRejected={() => {
-              Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.');
+              Alert.alert('Call Declined', 'The doctor declined the call.');
               setShowAudioCallModal(false);
               setCallInitiated(false); // Reset flag on rejection
             }}
@@ -1122,7 +1132,7 @@ export default function DoctorProfilePage() {
               setCallInitiated(false); // Reset flag on timeout
             }}
             onCallRejected={() => {
-              Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.');
+              Alert.alert('Call Declined', 'The doctor declined the call.');
               setShowVideoCallModal(false);
               setCallInitiated(false); // Reset flag on rejection
             }}
@@ -1145,6 +1155,14 @@ export default function DoctorProfilePage() {
         }}
         elementRefs={tourRefs}
         scrollViewRef={scrollViewRef}
+      />
+      <CustomAlertDialog
+        visible={showBusyModal}
+        onClose={() => setShowBusyModal(false)}
+        title="Doctor Busy"
+        message="The doctor is currently in another session. Please try again in a few minutes or choose another available doctor."
+        type="warning"
+        buttons={[{ text: 'OK', onPress: () => setShowBusyModal(false) }]}
       />
     </View >
   );

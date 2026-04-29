@@ -3,6 +3,13 @@ import { environment } from '../config/environment';
 
 const baseURL = `${environment.LARAVEL_API_URL}/api`;
 
+export interface ApiResponse<T = any> {
+  success: boolean;
+  message?: string;
+  data?: T;
+  errors?: any;
+}
+
 class ApiService {
   get baseURL() {
     return baseURL;
@@ -15,10 +22,29 @@ class ApiService {
     };
   }
 
-  async get(endpoint: string) {
+  async get<T = any>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
     try {
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${baseURL}${endpoint}`, {
+      let url = `${baseURL}${endpoint}`;
+
+      if (params && Object.keys(params).length > 0) {
+        const queryParams = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            if (Array.isArray(value)) {
+              value.forEach(v => queryParams.append(`${key}[]`, String(v)));
+            } else {
+              queryParams.append(key, String(value));
+            }
+          }
+        });
+        const queryString = queryParams.toString();
+        if (queryString) {
+          url += (url.includes('?') ? '&' : '?') + queryString;
+        }
+      }
+
+      const response = await fetch(url, {
         method: 'GET',
         headers,
       });
@@ -34,17 +60,17 @@ class ApiService {
     }
   }
 
-  async post(endpoint: string, data: any, options: { headers?: Record<string, string> } = {}) {
+  async post<T = any>(endpoint: string, data: any, options: { headers?: Record<string, string> } = {}): Promise<ApiResponse<T>> {
     try {
       const headers = await this.getAuthHeaders();
-      
+
       // Merge custom headers with auth headers
       const finalHeaders = { ...headers, ...options.headers };
-      
+
       // Add timeout to prevent hanging
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
+
       try {
         const response = await fetch(`${baseURL}${endpoint}`, {
           method: 'POST',
@@ -85,7 +111,7 @@ class ApiService {
             // If parsing fails, use the raw text (truncated)
             errorMessage = responseText.substring(0, 200);
           }
-          
+
           // Create error object with status and message
           const error: any = new Error(errorMessage);
           error.status = response.status;
@@ -114,7 +140,7 @@ class ApiService {
     }
   }
 
-  async patch(endpoint: string, data: any) {
+  async patch<T = any>(endpoint: string, data: any): Promise<ApiResponse<T>> {
     try {
       const headers = await this.getAuthHeaders();
       const response = await fetch(`${baseURL}${endpoint}`, {
@@ -134,10 +160,22 @@ class ApiService {
     }
   }
 
-  async delete(endpoint: string) {
+  async delete<T = any>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
     try {
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${baseURL}${endpoint}`, {
+      let url = `${baseURL}${endpoint}`;
+
+      if (params && Object.keys(params).length > 0) {
+        const queryParams = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            queryParams.append(key, String(value));
+          }
+        });
+        url += (url.includes('?') ? '&' : '?') + queryParams.toString();
+      }
+
+      const response = await fetch(url, {
         method: 'DELETE',
         headers,
       });
@@ -160,9 +198,9 @@ class ApiService {
         'Authorization': token ? `Bearer ${token}` : '',
         // Don't set Content-Type for FormData, let the browser set it with boundary
       };
-      
+
       console.log('ApiService: Making file upload request to:', `${baseURL}${endpoint}`);
-      
+
       const response = await fetch(`${baseURL}${endpoint}`, {
         method: 'POST',
         headers,

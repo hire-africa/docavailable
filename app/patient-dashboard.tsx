@@ -3,6 +3,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { FontAwesome } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -45,6 +46,8 @@ import { withDoctorPrefix } from '../utils/name';
 import { useTextAppointmentConverter } from '../hooks/useTextAppointmentConverter';
 import { appointmentService } from '../services/appointmentService';
 import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
+import { notificationApiService } from '../services/notificationApiService';
+import { textSessionService } from '../services/textSessionService';
 import { apiService } from './services/apiService';
 
 
@@ -506,6 +509,20 @@ export default function PatientDashboard() {
       setActivities(prevActivities =>
         addRealtimeActivity(prevActivities, event.type, event.title, event.description, newActivity.icon, newActivity.color)
       );
+
+      // Trigger data refreshes based on event type
+      if (event.type === 'appointment' || event.type === 'session') {
+        console.log('🔄 [PatientDashboard] Triggering refreshes for appointment/session event');
+        refreshHomeTab();
+        refreshMessagesTab();
+      } else if (event.type === 'payment') {
+        console.log('🔄 [PatientDashboard] Triggering refresh for payment event');
+        refreshUserData();
+        refreshSubscriptionData();
+      } else if (event.type === 'message') {
+        console.log('🔄 [PatientDashboard] Triggering refresh for message event');
+        refreshMessagesTab();
+      }
     });
 
     return unsubscribe;
@@ -636,22 +653,10 @@ export default function PatientDashboard() {
     }
   }, [userData]);
 
-  // Auto-refresh timer for appointments - updates every minute
+  // Auto-refresh timer for appointments - replaced by real-time events
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Refresh appointments to get updated remaining time
-      if (user) {
-        appointmentService.getAppointments()
-          .then((appointmentsData) => {
-            setAppointments(appointmentsData);
-          })
-          .catch(error => {
-            console.error('Auto-refresh: Error fetching appointments:', error);
-          });
-      }
-    }, 60000); // Update every 60 seconds (1 minute)
-
-    return () => clearInterval(interval);
+    console.log('📡 [PatientDashboard] 1-minute polling disabled, relying on real-time events');
+    return;
   }, [user]);
 
   // Update refs whenever appointments change
@@ -711,52 +716,9 @@ export default function PatientDashboard() {
       return;
     }
 
-    console.log('🔄 [PatientDashboard] Starting real-time polling for appointment sessions...');
-
-    const pollInterval = setInterval(async () => {
-      try {
-        // Re-check if we should still be polling using ref
-        if (!shouldPoll()) {
-          console.log('🛑 [PatientDashboard] No more appointments near time, stopping polling');
-          clearInterval(pollInterval);
-          return;
-        }
-
-        const appointmentsData = await appointmentService.getAppointments();
-
-        // Check if any appointment gained a session_id
-        const previousAppointments = previousAppointmentsRef.current;
-        const hasNewSession = appointmentsData.some((newAppt: any) => {
-          const oldAppt = previousAppointments.find((a: any) => a.id === newAppt.id);
-          const oldHasSession = oldAppt?.session_id || oldAppt?.sessionId;
-          const newHasSession = newAppt.session_id || newAppt.sessionId;
-
-          // If appointment didn't have a session before but now does, refresh
-          return !oldHasSession && newHasSession;
-        });
-
-        if (hasNewSession) {
-          console.log('✅ [PatientDashboard] Session created for appointment, refreshing chat list...');
-          setAppointments(appointmentsData);
-          appointmentsRef.current = appointmentsData;
-          previousAppointmentsRef.current = appointmentsData;
-          // Also refresh the messages tab to update the chat list immediately
-          refreshMessagesTab();
-        } else {
-          // Update appointments even if no new session (to keep data fresh)
-          setAppointments(appointmentsData);
-          appointmentsRef.current = appointmentsData;
-          previousAppointmentsRef.current = appointmentsData;
-        }
-      } catch (error) {
-        console.error('Error polling appointments for session updates:', error);
-      }
-    }, 8000); // Poll every 8 seconds (within 5-10s range as per documentation)
-
-    return () => {
-      console.log('🛑 [PatientDashboard] Stopping real-time polling for appointment sessions');
-      clearInterval(pollInterval);
-    };
+    // Real-time polling replaced by global WebSocket events
+    console.log('📡 [PatientDashboard] High-frequency polling disabled, relying on real-time events');
+    return;
   }, [user]);
 
   // Session Timer Effect
@@ -972,6 +934,15 @@ export default function PatientDashboard() {
       if (user?.id) {
         console.log('PatientDashboard: Screen focused, refreshing subscription data...');
         refreshSubscriptionData();
+
+        // Refresh notification count on focus to ensure it's up to date after returning from notifications page
+        notificationApiService.getUnreadCount()
+          .then(response => {
+            if (response.success && response.data) {
+              setUnreadNotificationCount(response.data.count);
+            }
+          })
+          .catch(err => console.error('Error refreshing notification count on focus:', err));
       }
     }, [user?.id, refreshSubscriptionData])
   );
@@ -995,12 +966,9 @@ export default function PatientDashboard() {
           prevActivities,
           'appointment_offer_sent',
           'Appointment Offer Sent',
-          'Your appointment request has been sent to the doctor. You\'ll receive a notification when they respond.',
-          {
-            doctorName: 'Selected Doctor',
-            patientName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
-            appointmentType: 'Consultation'
-          }
+          `Your appointment request has been sent to the doctor. You'll receive a notification when they respond. (Doctor: Selected Doctor)`,
+          'calendarCheck',
+          '#4CAF50'
         )
       );
 
@@ -1013,14 +981,11 @@ export default function PatientDashboard() {
       setActivities(prevActivities =>
         addRealtimeActivity(
           prevActivities,
-          'text_session_started', // Default to text, could be enhanced to detect session type
+          'text_session_started',
           'Session Started',
           'You started a consultation session with a doctor.',
-          {
-            doctorName: 'Selected Doctor',
-            patientName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
-            sessionType: 'Consultation'
-          }
+          'message',
+          '#2196F3'
         )
       );
 
@@ -1175,7 +1140,7 @@ export default function PatientDashboard() {
           // console.log('PatientDashboard: Raw doctors API response:', response);
           if (response.success && response.data) {
             // Handle paginated response from Laravel
-            const doctorsData = response.data.data || response.data;
+            const doctorsData = (response.data as any).data || response.data;
             // console.log('PatientDashboard: Fetched doctors:', doctorsData);
 
             if (Array.isArray(doctorsData)) {
@@ -1201,9 +1166,19 @@ export default function PatientDashboard() {
                     profile_picture_url: doctor.profile_picture_url,
                     // Add availability data
                     is_online: doctor.is_online_for_instant_sessions || doctor.is_online || false,
+                    is_available_now: !!doctor.is_available_now,
+                    is_on_break: !!doctor.is_on_break,
                     working_hours: doctor.working_hours,
                     max_patients_per_day: doctor.max_patients_per_day
                   };
+
+                  if (__DEV__ && doctor?.id) {
+                    console.log('Discover doctor availability:', {
+                      id: doctor.id,
+                      is_available_now: mappedDoctor.is_available_now,
+                      is_on_break: mappedDoctor.is_on_break,
+                    });
+                  }
 
                   // Debug logging for doctors with profile pictures (storage issue identified)
                   if (doctor.profile_picture_url) {
@@ -1435,7 +1410,7 @@ export default function PatientDashboard() {
 
       if (response && response.success && response.data) {
         // Handle paginated response from Laravel (same as original logic)
-        const doctorsData = response.data.data || response.data;
+        const doctorsData = (response.data as any).data || response.data;
         // console.log('PatientDashboard: Fetched doctors:', doctorsData);
 
         if (Array.isArray(doctorsData)) {
@@ -1460,6 +1435,7 @@ export default function PatientDashboard() {
               profile_picture_url: doctor.profile_picture_url,
               // Add availability data
               is_online: doctor.is_online_for_instant_sessions || doctor.is_online || false,
+              is_available_now: doctor.is_available_now || false,
               working_hours: doctor.working_hours,
               max_patients_per_day: doctor.max_patients_per_day
             }));
@@ -1740,7 +1716,7 @@ export default function PatientDashboard() {
 
     // Filter by online status if toggle is enabled
     if (showOnlyOnline) {
-      filteredDoctors = filteredDoctors.filter(doctor => doctor.is_online);
+      filteredDoctors = filteredDoctors.filter((doctor: any) => doctor.is_available_now);
     }
 
     // Filter by specialization if selected
@@ -1922,12 +1898,28 @@ export default function PatientDashboard() {
 
     try {
       setLoadingEndedSessions(true);
-      const sessions = await endedSessionStorageService.getEndedSessionsByPatient(user.id);
-      // console.log('📱 Loaded ended sessions:', sessions);
+
+      // 1. Fetch from local storage first for immediate display
+      let sessions = await endedSessionStorageService.getEndedSessionsByPatient(user.id);
       setEndedSessions(sessions || []);
+
+      // 2. Sync from backend to catch missing sessions (e.g. fresh install)
+      const historyResponse = await textSessionService.getHistory(1, 20);
+      if (historyResponse.success && historyResponse.data && historyResponse.data.length > 0) {
+        await endedSessionStorageService.syncEndedSessions(user.id, 'patient', historyResponse.data);
+        // Refresh local list after sync
+        sessions = await endedSessionStorageService.getEndedSessionsByPatient(user.id);
+        setEndedSessions(sessions || []);
+      }
     } catch (error) {
-      console.error('Error loading ended sessions:', error);
-      setEndedSessions([]);
+      console.error('Error loading/syncing ended sessions:', error);
+      // Fallback to local data only
+      try {
+        const sessions = await endedSessionStorageService.getEndedSessionsByPatient(user.id);
+        setEndedSessions(sessions || []);
+      } catch (innerError) {
+        setEndedSessions([]);
+      }
     } finally {
       setLoadingEndedSessions(false);
     }
@@ -2056,20 +2048,24 @@ export default function PatientDashboard() {
           )}
 
           {/* Welcome Section */}
-          <ThemedView style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 20,
-            padding: 24,
-            marginBottom: 24,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.08,
-            shadowRadius: 12,
-            elevation: 4,
-            alignItems: 'center',
-            flexDirection: 'column',
-            gap: 0
-          }}>
+          <LinearGradient
+            colors={['#4CAF50', '#45a049', '#2E7D32']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              borderRadius: 20,
+              padding: 24,
+              marginBottom: 24,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.08,
+              shadowRadius: 12,
+              elevation: 4,
+              alignItems: 'center',
+              flexDirection: 'column',
+              gap: 0,
+            }}
+          >
             {/* User Avatar */}
             <View style={{
               width: 64,
@@ -2098,7 +2094,7 @@ export default function PatientDashboard() {
               style={{
                 fontSize: 28,
                 fontWeight: 'bold',
-                color: '#222',
+                color: '#FFFFFF',
                 textAlign: 'center',
                 marginBottom: 6,
                 maxWidth: 240,
@@ -2113,7 +2109,7 @@ export default function PatientDashboard() {
             <ThemedText
               style={{
                 fontSize: 16,
-                color: '#666',
+                color: 'rgba(255,255,255,0.92)',
                 textAlign: 'center',
                 maxWidth: 280,
                 lineHeight: 22,
@@ -2124,7 +2120,7 @@ export default function PatientDashboard() {
             >
               How can we support your health today?
             </ThemedText>
-          </ThemedView>
+          </LinearGradient>
 
 
           {/* Remaining Sessions Section */}
@@ -2494,277 +2490,330 @@ export default function PatientDashboard() {
             .sort((a, b) => b.sortDate - a.sortDate);
 
 
-          return allItems.map((item, index) => {
-            const isLastItem = index === allItems.length - 1;
+          // Group items by date
+          const groupItemsByDate = (items: any[]) => {
+            const groups: { [key: string]: any[] } = {
+              'Today': [],
+              'Yesterday': [],
+              'This Week': [],
+              'Older': []
+            };
 
-            if (item.type === 'active_text') {
-              // Render active text session as card
-              return (
-                <TouchableOpacity
-                  key={`active_text_${item.id || item.appointment_id}`}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: 12,
-                    marginHorizontal: 20,
-                    marginBottom: 12,
-                    padding: 16,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 3,
-                    borderWidth: item.isActive ? 2 : 0,
-                    borderColor: item.isActive ? '#4CAF50' : 'transparent'
-                  }}
-                  onPress={() => {
-                    const chatId = `text_session_${item.id || item.appointment_id}`;
-                    router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{ position: 'relative' }}>
-                      <DoctorProfilePicture
-                        size={48}
-                        style={{ marginRight: 16 }}
-                        profilePictureUrl={item.doctor?.profile_picture_url || item.doctor?.profile_picture}
-                        name={`Dr. ${item.doctor?.first_name} ${item.doctor?.last_name}`}
-                      />
-                      {/* Active indicator */}
-                      {item.isActive && (
-                        <View style={{
-                          position: 'absolute',
-                          bottom: 2,
-                          right: 2,
-                          width: 12,
-                          height: 12,
-                          borderRadius: 6,
-                          backgroundColor: '#4CAF50',
-                          borderWidth: 2,
-                          borderColor: '#FFFFFF'
-                        }} />
-                      )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
-                        Dr. {item.doctor?.first_name} {item.doctor?.last_name}
-                      </Text>
-                      <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                        Text Session
-                      </Text>
-                      <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
-                        {item.remaining_time_minutes} min remaining
-                      </Text>
-                    </View>
-                    <Text style={{ fontSize: 12, color: '#999' }}>
-                      Now
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            } else if (item.type === 'active') {
-              // Render active appointment as card
-              return (
-                <TouchableOpacity
-                  key={`active_${item.id}`}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: 12,
-                    marginHorizontal: 20,
-                    marginBottom: 12,
-                    padding: 16,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 3
-                  }}
-                  onPress={() => {
-                    const appointmentType = (item.appointment_type ?? item.consultationType ?? item.type ?? null);
-                    const linkedSessionId = (item.session_id ?? item.sessionId ?? null);
-                    const hasLinkedSession = linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
-                    // Handle different appointment types
-                    if (appointmentType === 'text' || appointmentType === '') {
-                      // Text appointments: Only navigate to chat if session_id exists
-                      if (hasLinkedSession) {
-                        const chatId = `text_session_${linkedSessionId}`;
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+
+            const lastWeek = new Date(today);
+            lastWeek.setDate(lastWeek.getDate() - 7);
+
+            items.forEach(item => {
+              const itemDate = new Date(item.sortDate);
+              itemDate.setHours(0, 0, 0, 0);
+
+              if (itemDate.getTime() === today.getTime()) {
+                groups['Today'].push(item);
+              } else if (itemDate.getTime() === yesterday.getTime()) {
+                groups['Yesterday'].push(item);
+              } else if (itemDate.getTime() >= lastWeek.getTime()) {
+                groups['This Week'].push(item);
+              } else {
+                groups['Older'].push(item);
+              }
+            });
+
+            return groups;
+          };
+
+          const groupedItems = groupItemsByDate(allItems);
+          const sections = Object.entries(groupedItems).filter(([_, items]) => items.length > 0);
+
+          return sections.map(([title, items], sectionIndex) => (
+            <View key={`section_${title}`}>
+              <View style={{
+                paddingHorizontal: 20,
+                paddingVertical: 10,
+                backgroundColor: colors.background,
+                marginBottom: 8,
+                marginTop: sectionIndex === 0 ? 0 : 8
+              }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary || '#999', textTransform: 'uppercase', letterSpacing: 1 }}>
+                  {title}
+                </Text>
+              </View>
+              {items.map((item) => {
+                if (item.type === 'active_text') {
+                  // Render active text session as card
+                  return (
+                    <TouchableOpacity
+                      key={`active_text_${item.id || item.appointment_id}`}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 12,
+                        marginHorizontal: 20,
+                        marginBottom: 12,
+                        padding: 16,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 4,
+                        elevation: 3,
+                        borderWidth: item.isActive ? 2 : 0,
+                        borderColor: item.isActive ? '#4CAF50' : 'transparent'
+                      }}
+                      onPress={() => {
+                        const chatId = `text_session_${item.id || item.appointment_id}`;
                         router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
-                      } else {
-                        // No session yet - show appointment details
-                        router.push({ pathname: '/appointment-details/[id]', params: { id: item.id } });
-                      }
-                    } else if (appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') {
-                      // Call appointments (audio/video): Only navigate to chat if session is ready or active
-                      const status = getAppointmentSessionStatus(item);
-                      if (status === 'ready' || status === 'active') {
-                        router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: item.id } });
-                      } else {
-                        // Not time yet - show appointment details
-                        router.push({ pathname: '/appointment-details/[id]', params: { id: item.id } });
-                      }
-                    } else {
-                      // Unknown type - default to appointment details
-                      router.push({ pathname: '/appointment-details/[id]', params: { id: item.id } });
-                    }
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <DoctorProfilePicture
-                      size={48}
-                      style={{ marginRight: 16 }}
-                      profilePictureUrl={item.doctor_profile_picture_url || item.doctor_profile_picture || item.doctor?.profile_picture_url || item.doctor?.profile_picture}
-                      name={String(item.doctorName || item.doctor_name || 'Doctor')}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
-                        {String(item.doctorName || item.doctor_name || 'Doctor')}
-                      </Text>
-                      <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                        {item.reason || 'Chat'}
-                      </Text>
+                      }}
+                    >
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
-                          {item.consultationType === 'text' ? 'Text Chat' :
-                            item.consultationType === 'voice' ? 'Voice Call' :
-                              item.consultationType === 'video' ? 'Video Call' : 'Chat'}
+                        <View style={{ position: 'relative' }}>
+                          <DoctorProfilePicture
+                            size={48}
+                            style={{ marginRight: 16 }}
+                            profilePictureUrl={item.doctor?.profile_picture_url || item.doctor?.profile_picture}
+                            name={`Dr. ${item.doctor?.first_name} ${item.doctor?.last_name}`}
+                          />
+                          {/* Active indicator */}
+                          {item.isActive && (
+                            <View style={{
+                              position: 'absolute',
+                              bottom: 2,
+                              right: 2,
+                              width: 12,
+                              height: 12,
+                              borderRadius: 6,
+                              backgroundColor: '#4CAF50',
+                              borderWidth: 2,
+                              borderColor: '#FFFFFF'
+                            }} />
+                          )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                            Dr. {item.doctor?.first_name} {item.doctor?.last_name}
+                          </Text>
+                          <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                            Text Session
+                          </Text>
+                          <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                            {item.remaining_time_minutes} min remaining
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 12, color: '#999' }}>
+                          Now
                         </Text>
-                        {getAppointmentSessionStatus(item) === 'pending' && (
-                          <View style={{
-                            backgroundColor: '#FFF3E0',
-                            borderRadius: 8,
-                            paddingHorizontal: 8,
-                            paddingVertical: 2,
-                            marginLeft: 8,
-                            borderWidth: 1,
-                            borderColor: '#FFB74D',
-                          }}>
-                            <Text style={{ fontSize: 10, color: '#FF9800', fontWeight: '600' }}>
-                              UPCOMING
+                      </View>
+                    </TouchableOpacity>
+                  );
+                } else if (item.type === 'active') {
+                  // Render active appointment as card
+                  return (
+                    <TouchableOpacity
+                      key={`active_${item.id}`}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 12,
+                        marginHorizontal: 20,
+                        marginBottom: 12,
+                        padding: 16,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 4,
+                        elevation: 3
+                      }}
+                      onPress={() => {
+                        const appointmentType = (item.appointment_type ?? item.consultationType ?? item.type ?? null);
+                        const linkedSessionId = (item.session_id ?? item.sessionId ?? null);
+                        const hasLinkedSession = linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
+
+                        // Handle different appointment types
+                        if (appointmentType === 'text' || appointmentType === '') {
+                          // Text appointments: Only navigate to chat if session_id exists
+                          if (hasLinkedSession) {
+                            const chatId = `text_session_${linkedSessionId}`;
+                            router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+                          } else {
+                            // No session yet - show appointment details
+                            router.push({ pathname: '/appointment-details/[id]', params: { id: item.id } });
+                          }
+                        } else if (appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') {
+                          // Call appointments (audio/video): Only navigate to chat if session is ready or active
+                          const status = getAppointmentSessionStatus(item);
+                          if (status === 'ready' || status === 'active') {
+                            router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: item.id } });
+                          } else {
+                            // Not time yet - show appointment details
+                            router.push({ pathname: '/appointment-details/[id]', params: { id: item.id } });
+                          }
+                        } else {
+                          // Unknown type - default to appointment details
+                          router.push({ pathname: '/appointment-details/[id]', params: { id: item.id } });
+                        }
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <DoctorProfilePicture
+                          size={48}
+                          style={{ marginRight: 16 }}
+                          profilePictureUrl={item.doctor_profile_picture_url || item.doctor_profile_picture || item.doctor?.profile_picture_url || item.doctor?.profile_picture}
+                          name={String(item.doctorName || item.doctor_name || 'Doctor')}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                            {String(item.doctorName || item.doctor_name || 'Doctor')}
+                          </Text>
+                          <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                            {item.reason || 'Chat'}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                              {item.consultationType === 'text' ? 'Text Chat' :
+                                item.consultationType === 'voice' ? 'Voice Call' :
+                                  item.consultationType === 'video' ? 'Video Call' : 'Chat'}
+                            </Text>
+                            {getAppointmentSessionStatus(item) === 'pending' && (
+                              <View style={{
+                                backgroundColor: '#FFF3E0',
+                                borderRadius: 8,
+                                paddingHorizontal: 8,
+                                paddingVertical: 2,
+                                marginLeft: 8,
+                                borderWidth: 1,
+                                borderColor: '#FFB74D',
+                              }}>
+                                <Text style={{ fontSize: 10, color: '#FF9800', fontWeight: '600' }}>
+                                  UPCOMING
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          {getAppointmentSessionStatus(item) === 'ready' && (
+                            <View style={{ backgroundColor: '#4CAF50', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: 4 }}>
+                              <Text style={{ fontSize: 10, color: 'white', fontWeight: '600' }}>Ready</Text>
+                            </View>
+                          )}
+                          {getAppointmentSessionStatus(item) === 'scheduled' && (
+                            <View style={{ backgroundColor: '#999', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: 4 }}>
+                              <Text style={{ fontSize: 10, color: 'white', fontWeight: '600' }}>Pending</Text>
+                            </View>
+                          )}
+                          <Text style={{ fontSize: 12, color: '#999' }}>
+                            {item.appointment_date || item.date ? new Date(item.appointment_date || item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                } else if (item.type === 'ended') {
+                  // Render ended session as card
+                  return (
+                    <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
+                      <TouchableOpacity
+                        style={{
+                          backgroundColor: '#FFFFFF',
+                          borderRadius: 12,
+                          marginHorizontal: 20,
+                          marginBottom: 12,
+                          padding: 16,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.1,
+                          shadowRadius: 4,
+                          elevation: 3
+                        }}
+                        onPress={() => {
+                          router.push({ pathname: '/ended-session/[appointmentId]', params: { appointmentId: item.appointmentId.toString() } });
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <DoctorProfilePicture
+                            size={48}
+                            style={{ marginRight: 16 }}
+                            profilePictureUrl={item.doctor_profile_picture_url || item.doctor_profile_picture || item.doctor?.profile_picture_url || item.doctor?.profile_picture}
+                            name={withDoctorPrefix(item.doctor_name || 'Unknown')}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                              {withDoctorPrefix(item.doctor_name || 'Unknown')}
+                            </Text>
+                            <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                              {item.reason || 'General Checkup'}
+                            </Text>
+                            <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                              Session ended • {formatDuration(item.session_duration || 0)}
                             </Text>
                           </View>
-                        )}
-                      </View>
-                    </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      {getAppointmentSessionStatus(item) === 'ready' && (
-                        <View style={{ backgroundColor: '#4CAF50', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: 4 }}>
-                          <Text style={{ fontSize: 10, color: 'white', fontWeight: '600' }}>Ready</Text>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>
+                              {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date'}
+                            </Text>
+                            <TouchableOpacity
+                              style={{
+                                padding: 4,
+                              }}
+                              onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointmentId ? null : item.appointmentId)}
+                            >
+                              <Icon name="more" size={16} color="#999" />
+                            </TouchableOpacity>
+                          </View>
                         </View>
-                      )}
-                      {getAppointmentSessionStatus(item) === 'scheduled' && (
-                        <View style={{ backgroundColor: '#999', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: 4 }}>
-                          <Text style={{ fontSize: 10, color: 'white', fontWeight: '600' }}>Pending</Text>
-                        </View>
-                      )}
-                      <Text style={{ fontSize: 12, color: '#999' }}>
-                        {item.appointment_date || item.date ? new Date(item.appointment_date || item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            } else {
-              // Render ended session as card
-              return (
-                <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: '#FFFFFF',
-                      borderRadius: 12,
-                      marginHorizontal: 20,
-                      marginBottom: 12,
-                      padding: 16,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.1,
-                      shadowRadius: 4,
-                      elevation: 3
-                    }}
-                    onPress={() => {
-                      router.push({ pathname: '/ended-session/[appointmentId]', params: { appointmentId: item.appointmentId.toString() } });
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <DoctorProfilePicture
-                        size={48}
-                        style={{ marginRight: 16 }}
-                        profilePictureUrl={item.doctor_profile_picture_url || item.doctor_profile_picture || item.doctor?.profile_picture_url || item.doctor?.profile_picture}
-                        name={withDoctorPrefix(item.doctor_name || 'Unknown')}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
-                          {withDoctorPrefix(item.doctor_name || 'Unknown')}
-                        </Text>
-                        <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                          {item.reason || 'General Checkup'}
-                        </Text>
-                        <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
-                          Session ended • {formatDuration(item.session_duration || 0)}
-                        </Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>
-                          {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date'}
-                        </Text>
-                        <TouchableOpacity
-                          style={{
-                            padding: 4,
-                          }}
-                          onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointmentId ? null : item.appointmentId)}
-                        >
-                          <Icon name="more" size={16} color="#999" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
+                      </TouchableOpacity>
 
-                  {/* Menu dropdown */}
-                  {showEndedSessionMenu === item.appointmentId && (
-                    <View style={{
-                      position: 'absolute',
-                      right: 20,
-                      top: 60,
-                      backgroundColor: '#fff',
-                      borderRadius: 8,
-                      paddingVertical: 4,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.25,
-                      shadowRadius: 4,
-                      elevation: 5,
-                      zIndex: 2,
-                      minWidth: 120,
-                    }}>
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                        }}
-                        onPress={() => handleExportEndedSession(item.appointmentId)}
-                      >
-                        <Icon name="export" size={20} color="#666" />
-                        <Text style={{ fontSize: 14, color: '#222' }}>Export</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                        }}
-                        onPress={() => handleDeleteEndedSession(item.appointmentId)}
-                      >
-                        <Icon name="delete" size={20} color="#666" />
-                        <Text style={{ fontSize: 14, color: '#FF3B30' }}>Delete</Text>
-                      </TouchableOpacity>
+                      {/* Menu dropdown */}
+                      {showEndedSessionMenu === item.appointmentId && (
+                        <View style={{
+                          position: 'absolute',
+                          right: 20,
+                          top: 60,
+                          backgroundColor: '#fff',
+                          borderRadius: 8,
+                          paddingVertical: 4,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.25,
+                          shadowRadius: 4,
+                          elevation: 5,
+                          zIndex: 2,
+                          minWidth: 120,
+                        }}>
+                          <TouchableOpacity
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              paddingHorizontal: 16,
+                              paddingVertical: 12,
+                            }}
+                            onPress={() => handleExportEndedSession(item.appointmentId)}
+                          >
+                            <Icon name="export" size={20} color="#666" />
+                            <Text style={{ fontSize: 14, color: '#222' }}>Export</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              paddingHorizontal: 16,
+                              paddingVertical: 12,
+                            }}
+                            onPress={() => handleDeleteEndedSession(item.appointmentId)}
+                          >
+                            <Icon name="delete" size={20} color="#666" />
+                            <Text style={{ fontSize: 14, color: '#FF3B30' }}>Delete</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
-                  )}
-                </View>
-              );
-            }
-          });
+                  );
+                }
+                return null;
+              })}
+            </View>
+          ));
         })()}
 
         {/* Loading State for Ended Sessions */}
@@ -2987,7 +3036,7 @@ export default function PatientDashboard() {
                 {showOnlyOnline && (
                   <View style={styles.activeFilterChip}>
                     <Icon name="online" size={10} color="#4CAF50" style={{ marginRight: 6 }} />
-                    <Text style={styles.activeFilterChipText}>Online Only</Text>
+                    <Text style={styles.activeFilterChipText}>On duty only</Text>
                     <TouchableOpacity
                       onPress={() => setShowOnlyOnline(false)}
                       style={styles.removeFilterButton}
@@ -3139,7 +3188,7 @@ export default function PatientDashboard() {
                   apiService.get('/doctors/active')
                     .then((response: any) => {
                       if (response.success && response.data) {
-                        const doctorsData = response.data.data || response.data;
+                        const doctorsData = (response.data as any).data || response.data;
                         if (Array.isArray(doctorsData)) {
                           const approvedDoctors = doctorsData
                             .filter((doctor: any) => doctor.status === 'approved')
@@ -3159,7 +3208,9 @@ export default function PatientDashboard() {
                               status: doctor.status,
                               profile_picture: doctor.profile_picture,
                               profile_picture_url: doctor.profile_picture_url,
-                              is_online: doctor.is_online_for_instant_sessions || false
+                              is_online: doctor.is_online_for_instant_sessions || false,
+                              is_available_now: !!doctor.is_available_now,
+                              is_on_break: !!doctor.is_on_break,
                             }));
                           setDoctors(approvedDoctors);
                         } else {
@@ -3321,10 +3372,10 @@ export default function PatientDashboard() {
             if (month >= 0 && month <= 11 && day >= 1 && day <= 31 && year > 1900) {
               date = new Date(year, month, day);
             } else {
-              return 'Invalid Date';
+              return null;
             }
           } else {
-            return 'Invalid Date';
+            return null;
           }
         } else {
           // Try parsing as ISO string or other formats
@@ -3351,7 +3402,7 @@ export default function PatientDashboard() {
         __ts: (() => {
           try {
             const d = parseDateTime(appt.appointment_date || appt.date, appt.appointment_time || appt.time);
-            return d ? d.getTime() : 0;
+            return (d instanceof Date) ? d.getTime() : 0;
           } catch {
             return 0;
           }

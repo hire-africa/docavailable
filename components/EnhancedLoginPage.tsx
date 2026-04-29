@@ -1,7 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -14,9 +14,9 @@ import {
     View
 } from 'react-native';
 import authService from '../services/authService';
-import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
 import AuthErrorHandler from '../utils/authErrorHandler';
 import BiometricAuth from '../utils/biometricAuth';
+import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
 import NativeGoogleSignIn from './NativeGoogleSignIn';
 
 const { width } = Dimensions.get('window');
@@ -27,6 +27,7 @@ const INPUT_WIDTH_WEB = 320;
 export default function EnhancedLoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [showGoogleAuth, setShowGoogleAuth] = useState(false);
     const [biometricAvailable, setBiometricAvailable] = useState(false);
@@ -38,7 +39,7 @@ export default function EnhancedLoginPage() {
         const checkBiometric = async () => {
             const available = await BiometricAuth.isAvailable();
             const enabled = await BiometricAuth.isEnabled();
-            
+
             setBiometricAvailable(available);
             setBiometricEnabled(enabled);
         };
@@ -58,10 +59,10 @@ export default function EnhancedLoginPage() {
         try {
             console.log('EnhancedLoginPage: Attempting login with:', { email, password: '***' });
             const authState = await authService.signIn(email, password);
-            
+
             if (authState.data && authState.data.user) {
                 console.log('EnhancedLoginPage: Login successful');
-                
+
                 // Offer biometric setup for new users
                 if (biometricAvailable && !biometricEnabled) {
                     BiometricAuth.showSetupPrompt(
@@ -76,7 +77,7 @@ export default function EnhancedLoginPage() {
                         }
                     );
                 }
-                
+
                 navigateToUserDashboard(authState.data.user);
             } else {
                 throw new Error('User data not found in response');
@@ -92,7 +93,7 @@ export default function EnhancedLoginPage() {
     const handleBiometricLogin = async () => {
         try {
             setLoading(true);
-            
+
             // Get stored credentials for biometric login
             const storedEmail = await AsyncStorage.getItem('biometric_email');
             if (!storedEmail) {
@@ -103,7 +104,7 @@ export default function EnhancedLoginPage() {
             }
 
             const result = await BiometricAuth.authenticate('Sign in with biometrics');
-            
+
             if (result.success) {
                 // Get stored token or refresh session
                 const token = await AsyncStorage.getItem('auth_token');
@@ -115,7 +116,7 @@ export default function EnhancedLoginPage() {
                         return;
                     }
                 }
-                
+
                 // Token invalid, need to re-authenticate
                 AuthErrorHandler.showError({
                     message: 'Session expired. Please log in with your password.'
@@ -173,13 +174,13 @@ export default function EnhancedLoginPage() {
         console.log('🔐 Google Auth Success:', { user, token });
         setShowGoogleAuth(false);
         setLoading(true);
-        
+
         try {
             if (user.token) {
                 await AsyncStorage.setItem('auth_token', user.token);
                 console.log('🔐 Token stored successfully');
             }
-            
+
             navigateToUserDashboard(user);
         } catch (error) {
             console.error('🔐 Error after Google Auth success:', error);
@@ -194,13 +195,13 @@ export default function EnhancedLoginPage() {
     const handleGoogleAuthError = (error: string) => {
         console.error('🔐 Google Auth Error:', error);
         setShowGoogleAuth(false);
-        
+
         // Don't show alert for user cancellation
         if (AuthErrorHandler.shouldShowError && !AuthErrorHandler.shouldShowError(error)) {
             console.log('🔐 User cancelled Google sign-in, not showing error alert');
             return;
         }
-        
+
         AuthErrorHandler.showError({ message: error });
     };
 
@@ -214,13 +215,13 @@ export default function EnhancedLoginPage() {
             <View style={styles.content}>
                 <Text style={styles.title}>Welcome Back</Text>
                 <Text style={styles.subtitle}>Sign in to your account</Text>
-                
+
                 {userType && (
                     <View style={styles.userTypeIndicator}>
-                        <FontAwesome 
-                            name={userType === 'doctor' ? 'user-md' : 'user'} 
-                            size={16} 
-                            color="#4CAF50" 
+                        <FontAwesome
+                            name={userType === 'doctor' ? 'user-md' : 'user'}
+                            size={16}
+                            color="#4CAF50"
                         />
                         <Text style={styles.userTypeText}>
                             {userType === 'doctor' ? 'Doctor' : 'Patient'} Account
@@ -271,10 +272,20 @@ export default function EnhancedLoginPage() {
                             placeholderTextColor="#000"
                             value={password}
                             onChangeText={setPassword}
-                            secureTextEntry
+                            secureTextEntry={!showPassword}
                             autoCapitalize="none"
                             autoCorrect={false}
                         />
+                        <TouchableOpacity
+                            style={styles.eyeButton}
+                            onPress={() => setShowPassword(!showPassword)}
+                        >
+                            <FontAwesome
+                                name={showPassword ? "eye-slash" : "eye"}
+                                size={20}
+                                color="#666"
+                            />
+                        </TouchableOpacity>
                     </View>
 
                     <TouchableOpacity
@@ -434,6 +445,9 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#333',
     },
+    eyeButton: {
+        padding: 10,
+    },
     loginButton: {
         backgroundColor: '#4CAF50',
         borderRadius: 25,
@@ -549,13 +563,13 @@ const styles = StyleSheet.create({
 AuthErrorHandler.shouldShowError = (error: string): boolean => {
     const silentErrors = [
         'cancelled',
-        'user_cancelled', 
+        'user_cancelled',
         'access_denied',
         'SIGN_IN_CANCELLED',
         'No user data received from Google'
     ];
 
-    return !silentErrors.some(silentError => 
+    return !silentErrors.some(silentError =>
         error.toLowerCase().includes(silentError.toLowerCase())
     );
 };

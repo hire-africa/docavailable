@@ -1,3 +1,4 @@
+import { NativeModules } from 'react-native';
 import RNCallKeep from 'react-native-callkeep';
 import 'react-native-get-random-values';
 
@@ -36,7 +37,7 @@ class CallKeepService {
         },
         android: {
           alertTitle: 'Permissions Required',
-          alertDescription: 'DocAvailable needs access to your phone accounts',
+          alertDescription: 'DocAvailable needs permissions to handle calls',
           cancelButton: 'Cancel',
           okButton: 'OK',
           imageName: 'ic_launcher',
@@ -148,6 +149,18 @@ class CallKeepService {
 
   getCurrentCallId(): string | null {
     return this.currentCallId;
+  }
+
+  async dismissIncomingCall(appointmentId: string) {
+    try {
+      if (NativeModules.IncomingCallModule && NativeModules.IncomingCallModule.dismissIncomingCall) {
+        await NativeModules.IncomingCallModule.dismissIncomingCall({
+          sessionId: appointmentId
+        });
+      }
+    } catch (e) {
+      console.warn('CallKeep: dismissIncomingCall error:', e);
+    }
   }
 
   generateCallId(): string {

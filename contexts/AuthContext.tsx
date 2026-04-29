@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import authService from '../services/authService';
-import { UserData } from '../services/laravelService';
+import { globalEventService } from '../services/globalEventService';
+import { heartbeatService } from '../services/heartbeatService';
 import { destroyAllInstantSessionDetectors } from '../services/instantSessionMessageDetector';
+import { UserData } from '../services/laravelService';
 
 interface AuthContextType {
   user: UserData | null;
@@ -95,29 +97,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const fetchUserData = async (): Promise<UserData | null> => {
     try {
       // console.log('AuthContext: Fetching user data from Laravel backend...');
-      
+
       // Get token from authService
       const token = await authService.getStoredToken();
       // console.log('AuthContext: Stored token found:', !!token);
-      
+
       if (!token) {
         // console.log('AuthContext: No token found');
         return null;
       }
-      
+
       // Get current user from API using authService
       // console.log('AuthContext: Making request to /api/user...');
       const apiResponse = await authService.getCurrentUserFromAPI();
-      
+
       // console.log('AuthContext: API response:', apiResponse);
-      
+
       // Handle the wrapped response structure
       if (apiResponse && apiResponse.success && apiResponse.data) {
         console.log('🔍 [AuthContext] Raw API response:', apiResponse.data);
         console.log('🔍 [AuthContext] Has preferences:', !!apiResponse.data.preferences);
         console.log('🔍 [AuthContext] Has privacy_preferences:', !!apiResponse.data.privacy_preferences);
         console.log('🔍 [AuthContext] API response keys:', Object.keys(apiResponse.data));
-        
+
         const userData = convertApiUserToUserData(apiResponse.data);
         console.log('🔍 [AuthContext] Converted userData:', userData);
         console.log('🔍 [AuthContext] Converted preferences:', userData.preferences);
@@ -127,7 +129,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // console.log('AuthContext: API response indicates failure:', apiResponse?.message);
         return null;
       }
-      
+
     } catch (error: any) {
       console.error('AuthContext: Error fetching user data from Laravel:', error);
       return null;
@@ -139,23 +141,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // console.log('AuthContext: Refreshing user data...');
       const data = await fetchUserData();
       // console.log('AuthContext: Fetched user data:', data);
-      
+
       if (data) {
         // Force immediate update of both user and userData
         setUserData(data);
         setUser(data);
-        
+
         // Get token from authService
         const storedToken = await authService.getStoredToken();
         setToken(storedToken);
-        
+
         // console.log('AuthContext: User data refreshed successfully:', {
         //   user_type: data?.user_type,
         //   profile_picture_url: data?.profile_picture_url,
         //   profile_picture: data?.profile_picture,
         //   id: data?.id
         // });
-        
+
         // Force a re-render by triggering state update
         setTimeout(() => {
           setUserData(prev => ({ ...prev, ...data }));
@@ -182,7 +184,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(null);
         setUserData(null);
       }, 20000); // 20 second timeout
-      
+
       try {
         // Test API connection first (optional - don't fail auth if health check fails)
         try {
@@ -194,14 +196,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         } catch (healthError: any) {
           console.warn('AuthContext: API health check failed, but continuing with auth initialization:', healthError.message);
-          
+
           // Check if this is a deployment issue (HTML response instead of JSON)
           if (healthError.response?.data && typeof healthError.response.data === 'string' && healthError.response.data.includes('<br />')) {
             console.warn('AuthContext: Backend deployment issue detected - returning HTML instead of JSON');
             console.warn('AuthContext: This indicates the Laravel application is not properly deployed, but continuing with auth');
           }
         }
-        
+
         // Initialize authService first
         if (typeof global !== 'undefined' && (global as any)?.preloadedAuthPromise) {
           try {
@@ -213,11 +215,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         const authState = await authService.initialize();
         console.log('AuthContext: AuthService initialized:', authState);
-        
+
         if (authState.user) {
           console.log('AuthContext: User found, setting state:', authState.user.email, 'Type:', authState.user.user_type);
           setUser(authState.user);
           setUserData(authState.user);
+          if (authState.user.user_type === 'doctor') {
+            heartbeatService.start();
+          } else {
+            heartbeatService.stop();
+          }
           // Get token from authService
           const storedToken = await authService.getStoredToken();
           setToken(storedToken);
@@ -233,13 +240,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           } catch (e) {
             console.error('❌ [AuthContext] Failed to sync FCM token during init:', e);
           }
+
+          // CONNECT GLOBAL EVENT SERVICE
+          if (authState.user.id) {
+            globalEventService.connect(authState.user.id.toString(), authState.user.user_type);
+          }
         } else {
           console.log('AuthContext: No authenticated user found');
           setUser(null);
           setUserData(null);
           setToken(null);
+          heartbeatService.stop();
           // Clean up instant session detectors on logged-out state
-          try { await destroyAllInstantSessionDetectors(); } catch {}
+          try { await destroyAllInstantSessionDetectors(); } catch { }
         }
       } catch (error) {
         console.error('AuthContext: Error initializing auth:', error);
@@ -260,6 +273,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('AuthContext: Setting user data:', authState.user);
         setUser(authState.user);
         setUserData(authState.user);
+        if (authState.user.user_type === 'doctor') {
+          heartbeatService.start();
+        } else {
+          heartbeatService.stop();
+        }
         // Get token from authService (synchronous)
         authService.getStoredToken().then(async (storedToken) => {
           setToken(storedToken);
@@ -276,6 +294,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           } catch (e) {
             console.error('❌ [AuthContext] Failed to sync FCM token after login:', e);
           }
+
+          // CONNECT GLOBAL EVENT SERVICE
+          if (authState.user.id) {
+            globalEventService.connect(authState.user.id.toString(), authState.user.user_type);
+          }
         }).catch(error => {
           console.error('AuthContext: Error getting stored token:', error);
         });
@@ -284,14 +307,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(null);
         setUserData(null);
         setToken(null);
+        heartbeatService.stop();
+        // DISCONNECT GLOBAL EVENT SERVICE
+        globalEventService.disconnect();
         // Clean up instant session detectors when user logs out
-        (async () => { try { await destroyAllInstantSessionDetectors(); } catch {} })();
+        (async () => { try { await destroyAllInstantSessionDetectors(); } catch { } })();
       }
     };
 
     // Subscribe to auth state changes
     authService.subscribe(handleAuthStateChange);
-    
+
     // Don't try to get current user sync here - let the async initialization handle it
     // The getCurrentUserSync() method will now properly return the current user state
 

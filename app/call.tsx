@@ -1,6 +1,6 @@
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, StyleSheet, Text, View } from 'react-native';
+import { Stack, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, BackHandler, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCall from '../components/AudioCall';
 import VideoCallModal from '../components/VideoCallModal';
@@ -73,17 +73,48 @@ export default function CallScreen() {
     initializeCall();
   }, []);
 
+  // Safety net: ensure resources are released on unmount (e.g., if navigation kills the screen)
+  useEffect(() => {
+    return () => {
+      console.log('🧹 [CallScreen] Unmount safety net - destroying resources');
+      try { AudioCallService.getInstance().destroyResources(); } catch (e) { }
+      try { VideoCallService.getInstance().destroyResources(); } catch (e) { }
+      AudioCallService.clearInstance();
+      VideoCallService.clearInstance();
+    };
+  }, []);
+
+  const navigation = useNavigation();
+
   // SECURITY: Block system back navigation during active call
   // Users can only exit the call screen by explicitly ending the call
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      // Block the back button - return true to prevent default behavior
-      console.log('🚫 [CallScreen] Back button blocked during active call');
-      return true;
-    });
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Block the back button - return true to prevent default behavior
+        console.log('🚫 [CallScreen] Hardware back button blocked during active call');
+        return true;
+      };
 
-    return () => backHandler.remove();
-  }, []);
+      // Add hardware back listener
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      // Add navigation listener to prevent ANY way of leaving the screen accidentally (swipes, gestures, etc.)
+      const beforeRemoveUnsub = navigation.addListener('beforeRemove', (e: any) => {
+        // If it's a "back" or "pop" action from navigation itself
+        if (e.data.action.type === 'POP' || e.data.action.type === 'GO_BACK') {
+          // Prevent default behavior
+          e.preventDefault();
+          console.log('🚫 [CallScreen] Navigation back action blocked');
+        }
+      });
+
+      return () => {
+        backHandler.remove();
+        beforeRemoveUnsub();
+      };
+    }, [navigation])
+  );
 
   const initializeCall = async () => {
     let initTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -146,6 +177,12 @@ export default function CallScreen() {
       const userId = user.id.toString();
       const isDoctor = user.user_type === 'doctor';
 
+      // Set global flags for signaling services (fallback)
+      if (typeof global !== 'undefined') {
+        (global as any).userType = user.user_type;
+        (global as any).isDoctor = isDoctor;
+      }
+
       console.log('📞 Initializing call:', {
         appointmentId,
         userId,
@@ -175,44 +212,9 @@ export default function CallScreen() {
           }
           setShowAudioCall(true);
         } else {
-          // Outgoing call - show UI immediately
-          setShowAudioCall(true);
-          audioCallService.current = AudioCallService.getInstance();
-          await audioCallService.current.initialize(
-            appointmentId,
-            userId,
-            String(doctorId || ''),
-            {
-              onCallAnswered: () => {
-                console.log('📞 Audio call answered');
-                // UI already shown, just log
-              },
-              onCallEnded: () => {
-                console.log('📞 Audio call ended');
-                handleCallEnd();
-              },
-              onCallTimeout: () => {
-                console.log('📞 Audio call timeout');
-                handleCallTimeout();
-              },
-              onCallRejected: () => {
-                console.log('📞 Audio call rejected');
-                handleCallRejected();
-              },
-              onRemoteStream: () => {
-                console.log('📞 Remote audio stream received');
-              },
-              onStateChange: (state) => {
-                console.log('📞 Audio call state changed:', state);
-              },
-              onError: (error) => {
-                console.error('📞 Audio call error:', error);
-                setError(error);
-              }
-            }
-          );
-
-          // The call starts automatically after initialization
+          // Outgoing call - show UI immediately, let AudioCall component handle initialization
+          // (do NOT call initialize() here -- AudioCall.tsx does its own initialization
+          //  on the same singleton, which would cause a double getUserMedia race)
           setShowAudioCall(true);
         }
       } else if (normalizedCallType === 'video') {
@@ -244,9 +246,9 @@ export default function CallScreen() {
                 console.log('📹 Video call timeout');
                 handleCallTimeout();
               },
-              onCallRejected: () => {
+              onCallRejected: (rejectedBy?: string) => {
                 console.log('📹 Video call rejected');
-                handleCallRejected();
+                handleCallRejected(rejectedBy);
               },
               onRemoteStream: () => {
                 console.log('📹 Remote video stream received');
@@ -284,12 +286,12 @@ export default function CallScreen() {
       console.error('❌ Failed to stop ringtone:', error);
     }
 
-    // Clean up call services
+    // Clean up call services - MUST await to ensure cleanup completes before navigation
     if (audioCallService.current) {
-      audioCallService.current.endCall();
+      await audioCallService.current.endCall();
     }
     if (videoCallService.current) {
-      videoCallService.current.endCall();
+      await videoCallService.current.endCall();
     }
 
     // Navigate back to the correct dashboard based on role
@@ -313,20 +315,17 @@ export default function CallScreen() {
     );
   };
 
-  const handleCallRejected = () => {
-    Alert.alert(
-      'Call Rejected',
-      'The doctor is not available right now. Please try again later.',
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            const isDoctorUser = user?.user_type === 'doctor';
-            router.replace(isDoctorUser ? '/doctor-dashboard' : '/patient-dashboard');
-          }
-        }
-      ]
-    );
+  const handleCallRejected = (rejectedBy?: string) => {
+    const isCallerView = !isIncomingCall;
+
+    if (isCallerView) {
+      Alert.alert('Call Declined', 'The doctor declined the call.');
+    } else {
+      Alert.alert('Call Declined', 'You declined the call.');
+    }
+
+    const isDoctorUser = user?.user_type === 'doctor';
+    router.replace(isDoctorUser ? '/doctor-dashboard' : '/patient-dashboard');
   };
 
   if (isLoading) {
@@ -348,9 +347,15 @@ export default function CallScreen() {
         <View style={styles.errorContainer}>
           <Text style={styles.errorTitle}>Call Error</Text>
           <Text style={styles.errorText}>{error}</Text>
-          <Text style={styles.retryText} onPress={() => router.back()}>
-            Go Back
-          </Text>
+          <TouchableOpacity
+            style={styles.exitButton}
+            onPress={() => {
+              const isDoctorUser = user?.user_type === 'doctor';
+              router.replace(isDoctorUser ? '/doctor-dashboard' : '/patient-dashboard');
+            }}
+          >
+            <Text style={styles.exitButtonText}>Exit Call</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -463,5 +468,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textDecorationLine: 'underline',
+  },
+  exitButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  exitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

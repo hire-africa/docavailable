@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import favoriteDoctorsService from '../services/favoriteDoctorsService';
+import { stripDoctorPrefix } from '../utils/name';
 import DoctorProfilePicture from './DoctorProfilePicture';
 import Icon from './Icon';
-import { stripDoctorPrefix } from '../utils/name';
-import favoriteDoctorsService from '../services/favoriteDoctorsService';
 
 interface DoctorCardProps {
   doctor: any;
@@ -39,7 +39,7 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
     }
   };
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.card}
       onPress={() => onPress(doctor)}
       activeOpacity={0.7}
@@ -53,12 +53,14 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
           style={styles.profilePicture}
           name={stripDoctorPrefix(((doctor as any).name || `${(doctor as any).first_name || ''} ${(doctor as any).last_name || ''}`.trim() || 'Doctor'))}
         />
-        {/* Green dot for online doctors */}
-        {doctor.is_online && (
-          <View style={styles.onlineIndicator} />
-        )}
+        {(() => {
+          const isOnDuty = !!(doctor as any).is_available_now;
+          const isOnBreak = !!(doctor as any).is_on_break;
+          const color = isOnDuty ? '#4CAF50' : isOnBreak ? '#F4C430' : '#999';
+          return <View style={[styles.onlineIndicator, { backgroundColor: color }]} />;
+        })()}
       </View>
-      
+
       {/* Content - Right Side */}
       <View style={styles.content}>
         <View style={styles.locationBadgeContainer}>
@@ -80,25 +82,25 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
             return `${specializationText} • ${doctor.years_of_experience || 0}+ years`;
           })()}
         </Text>
-        
+
         {doctor.languages_spoken && doctor.languages_spoken.length > 0 && (
           <Text style={styles.languages}>
             Languages: {doctor.languages_spoken.join(', ')}
           </Text>
         )}
       </View>
-      
+
       {/* Bookmark and Chevron Icons - Right Side */}
       <View style={styles.rightActions}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.bookmarkButton}
           onPress={handleFavoritePress}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Icon 
-            name={isFavorite ? 'bookmark' : 'bookmarkO'} 
-            size={20} 
-            color={isFavorite ? '#4CAF50' : '#CCC'} 
+          <Icon
+            name={isFavorite ? 'bookmark' : 'bookmarkO'}
+            size={20}
+            color={isFavorite ? '#4CAF50' : '#CCC'}
           />
         </TouchableOpacity>
         <Icon name="right" size={20} color="#4CAF50" style={styles.chevron} />
@@ -111,6 +113,8 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
   return (
     prevProps.doctor.id === nextProps.doctor.id &&
     prevProps.doctor.is_online === nextProps.doctor.is_online &&
+    prevProps.doctor.is_available_now === nextProps.doctor.is_available_now &&
+    prevProps.doctor.is_on_break === nextProps.doctor.is_on_break &&
     prevProps.doctor.profile_picture_url === nextProps.doctor.profile_picture_url &&
     prevProps.onPress === nextProps.onPress
   );
