@@ -16,19 +16,22 @@ return Application::configure(basePath: dirname(__DIR__))
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
 
+        $middleware->append([
+            \App\Http\Middleware\ProcessQueueJobs::class,
+            \App\Http\Middleware\SecurityHeadersMiddleware::class,
+        ]);
+
         $middleware->alias([
             'verified' => \App\Http\Middleware\EnsureEmailIsVerified::class,
-            'role' => \App\Http\Middleware\CheckRole::class,
+            'role' => \App\Http\Middleware\RoleMiddleware::class,
+            'check.role' => \App\Http\Middleware\CheckRole::class,
             'log.api' => \App\Http\Middleware\LogApiRequests::class,
             'validate.json' => \App\Http\Middleware\ValidateJsonRequest::class,
             'performance.monitor' => \App\Http\Middleware\PerformanceMonitor::class,
-            // Aliases from Kernel.php — must be duplicated here for Laravel 11 compatibility
             'session.guard' => \App\Http\Middleware\EnsureSessionIsActive::class,
             'process.queue' => \App\Http\Middleware\ProcessQueueJobs::class,
             'admin.ip' => \App\Http\Middleware\AdminIpWhitelistMiddleware::class,
         ]);
-
-        //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
