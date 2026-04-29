@@ -264,35 +264,46 @@ class TextSessionController extends Controller
                     'doctor_response_deadline' => null, // Set to null initially - will be set when patient sends first message
                 ]);
 
-                // Create chat room
-                $chatRoomName = "text_session_{$textSession->id}";
-                $chatRoomId = DB::table('chat_rooms')->insertGetId([
-                    'name' => $chatRoomName,
-                    'type' => 'text_session',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+                // Find or create persistent private chat room between patient and doctor
+                $chatRoomId = DB::table('chat_rooms as cr')
+                    ->join('chat_room_participants as p1', 'cr.id', '=', 'p1.chat_room_id')
+                    ->join('chat_room_participants as p2', 'cr.id', '=', 'p2.chat_room_id')
+                    ->where('cr.type', 'private')
+                    ->where('p1.user_id', $patientId)
+                    ->where('p2.user_id', $doctorId)
+                    ->value('cr.id');
+
+                if (!$chatRoomId) {
+                    // Create persistent private chat room
+                    $chatRoomId = DB::table('chat_rooms')->insertGetId([
+                        'name' => "Chat",
+                        'type' => 'private',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                    // Add participants
+                    DB::table('chat_room_participants')->insert([
+                        [
+                            'chat_room_id' => $chatRoomId,
+                            'user_id' => $patientId,
+                            'role' => 'member',
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ],
+                        [
+                            'chat_room_id' => $chatRoomId,
+                            'user_id' => $doctorId,
+                            'role' => 'member',
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]
+                    ]);
+                }
 
                 // Update session with chat_id
                 $textSession->update(['chat_id' => $chatRoomId]);
 
-                // Add participants
-                DB::table('chat_room_participants')->insert([
-                    [
-                        'chat_room_id' => $chatRoomId,
-                        'user_id' => $patientId,
-                        'role' => 'member',
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ],
-                    [
-                        'chat_room_id' => $chatRoomId,
-                        'user_id' => $doctorId,
-                        'role' => 'member',
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]
-                ]);
 
                 return $textSession;
             });
@@ -326,6 +337,11 @@ class TextSessionController extends Controller
 
             // Send notifications to both patient and doctor
             $this->notificationService->sendTextSessionNotification($session, 'started', 'Your text session has started');
+
+            // Send "Session Started" system message to the unified room
+            if (!empty($session->chat_id)) {
+                $this->sendSystemMessage($session->chat_id, "--- Session Started: " . ($reason ?: 'Consultation') . " ---");
+            }
 
             return response()->json([
                 'success' => true,
@@ -484,6 +500,11 @@ class TextSessionController extends Controller
                         // Don't fail the expiry if broadcast fails
                     }
 
+                    // Send "Session Ended" system message
+                    if (!empty($session->chat_id)) {
+                        $this->sendSystemMessage($session->chat_id, "--- Session Ended: Doctor did not respond ---");
+                    }
+
                     return response()->json([
                         'success' => true,
                         'status' => 'expired',
@@ -544,6 +565,11 @@ class TextSessionController extends Controller
                         'session_id' => $sessionId,
                         'error' => $e->getMessage()
                     ]);
+                }
+
+                // Send "Session Ended" system message
+                if (!empty($session->chat_id)) {
+                    $this->sendSystemMessage($session->chat_id, "--- Session Ended: Time limit reached ---");
                 }
 
                 return response()->json([
@@ -780,8 +806,7 @@ class TextSessionController extends Controller
 
                 // Apply anonymization for patients viewing doctor data
                 if ($userType === 'patient' && $session->doctor && $this->anonymizationService->isAnonymousModeEnabled($session->doctor)) {
-                    $anonymizedDoctorData = $this->anonymizationService->getAnonymizedUserData($session->doctor);
-                    $sessionData['doctor'] = $anonymizedDoctorData;
+                    $sessionData['doctor'] = $this->anonymizationService->getAnonymizedUserData($session->doctor);
                 }
 
                 return $sessionData;
@@ -967,6 +992,11 @@ class TextSessionController extends Controller
 
             // Send notifications to both patient and doctor
             $this->notificationService->sendTextSessionNotification($session, 'ended', 'Your text session has ended');
+
+            // Send "Session Ended" system message
+            if (!empty($session->chat_id)) {
+                $this->sendSystemMessage($session->chat_id, "--- Session Ended ---");
+            }
 
             return response()->json([
                 'success' => true,
@@ -1852,4 +1882,49 @@ class TextSessionController extends Controller
         }
         return $sessionId;
     }
+    /**
+     * Send a system message to the chat room.
+     */
+    private function sendSystemMessage($identifier, $message, $sessionType = 'text_session')
+    {
+        try {
+            $messageData = [
+                'message_id' => \Illuminate\Support\Str::uuid()->toString(),
+                'sender_id' => 0,
+                'sender_name' => 'System',
+                'message' => $message,
+                'message_type' => 'text',
+                'delivery_status' => 'sent',
+                'created_at' => now()->toIso8601String(),
+                'is_system' => true
+            ];
+            
+            $this->messageStorageService->storeMessage((int)$identifier, $messageData, $sessionType);
+            
+            // Broadcast via WebSocket if possible
+            try {
+                $webrtcUrl = env('WEBRTC_CHAT_SERVER_URL', 'https://docavailable.org:8089');
+                $broadcastUrl = "{$webrtcUrl}/broadcast-system-message";
+
+                $ch = curl_init($broadcastUrl);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+                    'identifier' => $identifier,
+                    'sessionType' => $sessionType,
+                    'message' => $messageData
+                ]));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 2);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_exec($ch);
+                curl_close($ch);
+            } catch (\Exception $e) {
+                // Ignore broadcast failures
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to send system message", ['error' => $e->getMessage()]);
+        }
+    }
 }
+

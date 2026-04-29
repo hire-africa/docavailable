@@ -15,7 +15,7 @@ const axios = require('axios');
 
 // Configuration
 const CONFIG = {
-  PORT: process.env.WEBRTC_SIGNALING_PORT || 8080,
+  PORT: process.env.WEBRTC_SIGNALING_PORT || 8081,
   API_BASE_URL: process.env.API_BASE_URL || 'https://docavailable-3vbdv.ondigitalocean.app',
   API_AUTH_TOKEN: process.env.API_AUTH_TOKEN || 'your-api-token',
   SSL_CERT_PATH: '/etc/letsencrypt/live/docavailable.org/fullchain.pem',
@@ -29,6 +29,7 @@ const CONFIG = {
 
 // Global state
 const connections = new Map(); // appointmentId -> Set of WebSocket connections
+const userNotificationConnections = new Map(); // userId -> Set of WebSocket (for incoming-call notifications to web)
 const sessionTimers = new Map(); // sessionId -> timer
 const processedOffers = new Map(); // offerKey -> timestamp
 
@@ -54,6 +55,13 @@ const legacyAudioWss = new WebSocket.Server({
 const chatWss = new WebSocket.Server({
   server,
   path: '/chat-signaling',
+  perMessageDeflate: false,
+  maxPayload: CONFIG.MAX_PAYLOAD,
+});
+
+const notificationWss = new WebSocket.Server({
+  server,
+  path: '/incoming-call-notifications',
   perMessageDeflate: false,
   maxPayload: CONFIG.MAX_PAYLOAD,
 });
@@ -576,6 +584,42 @@ chatWss.on('connection', (ws, req) => {
   handleConnection(ws, req, 'chat');
 });
 
+notificationWss.on('connection', (ws, req) => {
+  const { userId } = url.parse(req.url, true).query;
+  if (!userId) {
+    log('WARN', 'Notification connection rejected: Missing userId');
+    ws.close(1008, 'Missing userId');
+    return;
+  }
+
+  const uid = String(userId);
+  if (!userNotificationConnections.has(uid)) {
+    userNotificationConnections.set(uid, new Set());
+  }
+  userNotificationConnections.get(uid).add(ws);
+
+  log('INFO', `User ${uid} subscribed to incoming-call notifications`);
+  
+  safeSend(ws, { 
+    type: 'notification-connection-established', 
+    userId: uid, 
+    timestamp: new Date().toISOString() 
+  });
+
+  ws.on('close', () => {
+    const set = userNotificationConnections.get(uid);
+    if (set) {
+      set.delete(ws);
+      if (set.size === 0) userNotificationConnections.delete(uid);
+    }
+    log('INFO', `User ${uid} unsubscribed from notifications`);
+  });
+
+  ws.on('error', (err) => {
+    log('ERROR', `Notification WebSocket error for user ${uid}`, { error: err.message });
+  });
+});
+
 // Health check endpoints matching documented URLs:
 // - https://docavailable.org/call-health
 // - https://docavailable.org/chat-health  
@@ -622,7 +666,58 @@ server.on('request', (req, res) => {
         chat: { endpoint: 'wss://docavailable.org/chat-signaling', status: 'healthy' }
       }
     }));
-  } else if (req.url.startsWith('/call-signaling') || req.url.startsWith('/audio-signaling') || req.url.startsWith('/chat-signaling')) {
+  } else if (req.url === '/broadcast-incoming-call' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const receiverUserId = String(payload.receiverUserId || payload.userId || '');
+        const appointmentId = String(payload.appointmentId || payload.appointment_id || '');
+        const rawCallType = String(payload.callType || payload.call_type || 'audio').toLowerCase();
+        const callType = rawCallType === 'video' ? 'video' : 'audio';
+        
+        if (!receiverUserId || !appointmentId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, message: 'receiverUserId and appointmentId are required' }));
+          return;
+        }
+
+        const message = {
+          type: 'incoming_call',
+          appointment_id: appointmentId,
+          call_type: callType,
+          doctor_name: payload.callerName || payload.doctorName || '',
+          doctor_profile_picture: payload.callerProfilePicture || payload.doctorProfilePicture || '',
+          doctor_id: payload.callerId || payload.doctorId || null,
+          isIncomingCall: 'true',
+          source: 'websocket_notification',
+          timestamp: new Date().toISOString()
+        };
+
+        const userConns = userNotificationConnections.get(receiverUserId) || new Set();
+        let sent = 0;
+        userConns.forEach((ws) => {
+          if (ws.readyState === WebSocket.OPEN && safeSend(ws, message)) {
+            sent++;
+          }
+        });
+
+        log('INFO', `Broadcasted incoming call to user ${receiverUserId}`, { 
+          appointmentId, 
+          callType, 
+          sentConnections: sent 
+        });
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, sent }));
+      } catch (e) {
+        log('ERROR', 'Error processing broadcast-incoming-call', { error: e.message });
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Invalid JSON body' }));
+      }
+    });
+  } else if (req.url.startsWith('/call-signaling') || req.url.startsWith('/audio-signaling') || req.url.startsWith('/chat-signaling') || req.url.startsWith('/incoming-call-notifications')) {
     // Let WebSocket server handle these paths
     log('DEBUG', 'Passing WebSocket path to ws server handlers', { url: req.url });
   } else {

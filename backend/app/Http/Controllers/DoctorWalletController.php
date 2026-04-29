@@ -278,10 +278,18 @@ class DoctorWalletController extends Controller
         }
 
         $request->validate([
-            'amount' => 'required|numeric|min:1000|max:1000000', // Min 1000, Max 1M
+            'amount' => 'required|numeric|max:1000000', // Max 1M
             'payment_method' => 'required|in:bank_transfer,mobile_money',
             'payment_details' => 'required|array',
         ]);
+
+        $minimumAmount = strtolower($user->country ?? '') === 'malawi' ? 50000 : 70;
+        if ((float) $request->amount < $minimumAmount) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Minimum payout is ' . $minimumAmount . ' for your account currency.'
+            ], 422);
+        }
 
         // Validate payment details based on method
         if ($request->payment_method === 'bank_transfer') {
