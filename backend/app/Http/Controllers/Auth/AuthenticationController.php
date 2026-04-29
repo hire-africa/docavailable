@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Traits\HasImageUrls;
 use App\Traits\HandlesPhoneNormalization;
 use App\Mail\VerificationCodeMail;
+use App\Models\UserSession;
 
 class AuthenticationController extends Controller
 {
@@ -318,6 +319,7 @@ class AuthenticationController extends Controller
 
             // Generate JWT token
             $token = auth('api')->login($user);
+            $this->registerUserSession($request, $user, $token);
 
             // Note: Profile picture processing job is not needed when using DigitalOcean Spaces
             // as images are already compressed and stored directly in the cloud
@@ -511,6 +513,7 @@ class AuthenticationController extends Controller
             }
 
             $user = auth('api')->user();
+            $this->registerUserSession($request, $user, $token);
 
             // Check user status after successful authentication
             $statusCheck = $this->checkUserStatus($user);
@@ -747,6 +750,7 @@ class AuthenticationController extends Controller
 
             // Generate JWT token
             $token = auth('api')->login($user);
+            $this->registerUserSession($request, $user, $token);
 
             Log::info('User logged in with Google successfully', [
                 'user_id' => $user->id,
@@ -1119,6 +1123,7 @@ class AuthenticationController extends Controller
     public function logout(Request $request): JsonResponse
     {
         try {
+            $this->revokeCurrentSession();
             Auth::logout();
 
             return response()->json([
@@ -1145,6 +1150,7 @@ class AuthenticationController extends Controller
     public function refresh(Request $request): JsonResponse
     {
         try {
+            $oldJti = $this->currentJti();
             // Get the current token from the request
             $token = $request->bearerToken();
 
@@ -1158,6 +1164,13 @@ class AuthenticationController extends Controller
             // Try to refresh the token
             $newToken = auth('api')->refresh();
             $user = auth('api')->user();
+            if ($oldJti) {
+                UserSession::where('user_id', $user->id)
+                    ->where('jti', $oldJti)
+                    ->whereNull('revoked_at')
+                    ->update(['revoked_at' => now()]);
+            }
+            $this->registerUserSession($request, $user, $newToken);
 
             // Generate full URLs for images if they exist
             $userData = $this->generateImageUrls($user);
@@ -1970,5 +1983,103 @@ class AuthenticationController extends Controller
         ];
 
         return $fieldTypes[$field] ?? 'text';
+    }
+
+    private function registerUserSession(Request $request, User $user, string $token): void
+    {
+        try {
+            $payload = auth('api')->setToken($token)->getPayload();
+            $jti = (string) $payload->get('jti');
+            $exp = (int) $payload->get('exp');
+            $ua = (string) $request->userAgent();
+
+            if (!$jti) {
+                return;
+            }
+
+            UserSession::updateOrCreate(
+                [
+                    'user_id' => $user->id,
+                    'jti' => $jti,
+                ],
+                [
+                    'device_name' => $this->deviceNameFromUserAgent($ua),
+                    'platform' => $this->platformFromUserAgent($ua),
+                    'browser' => $this->browserFromUserAgent($ua),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $ua,
+                    'last_seen_at' => now(),
+                    'expires_at' => $exp ? now()->setTimestamp($exp) : now()->addDays(7),
+                    'revoked_at' => null,
+                ]
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Failed to register user session', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function revokeCurrentSession(): void
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return;
+            }
+
+            $jti = $this->currentJti();
+            if (!$jti) {
+                return;
+            }
+
+            UserSession::where('user_id', $user->id)
+                ->where('jti', $jti)
+                ->whereNull('revoked_at')
+                ->update(['revoked_at' => now()]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to revoke current session', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function currentJti(): ?string
+    {
+        try {
+            $payload = auth('api')->payload();
+            return $payload ? (string) $payload->get('jti') : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function platformFromUserAgent(string $ua): string
+    {
+        $s = strtolower($ua);
+        if (str_contains($s, 'windows')) return 'Windows';
+        if (str_contains($s, 'mac os') || str_contains($s, 'macintosh')) return 'macOS';
+        if (str_contains($s, 'iphone') || str_contains($s, 'ios')) return 'iOS';
+        if (str_contains($s, 'android')) return 'Android';
+        if (str_contains($s, 'linux')) return 'Linux';
+        return 'Unknown OS';
+    }
+
+    private function browserFromUserAgent(string $ua): string
+    {
+        $s = strtolower($ua);
+        if (str_contains($s, 'edg/')) return 'Edge';
+        if (str_contains($s, 'firefox')) return 'Firefox';
+        if (str_contains($s, 'safari') && !str_contains($s, 'chrome')) return 'Safari';
+        if (str_contains($s, 'chrome')) return 'Chrome';
+        return 'Browser';
+    }
+
+    private function deviceNameFromUserAgent(string $ua): string
+    {
+        $platform = $this->platformFromUserAgent($ua);
+        $browser = $this->browserFromUserAgent($ua);
+        return trim($browser . ' on ' . $platform);
     }
 }

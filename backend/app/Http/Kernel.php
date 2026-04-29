@@ -69,5 +69,6 @@ class Kernel extends HttpKernel
         'process.queue' => \App\Http\Middleware\ProcessQueueJobs::class,
         'role' => \App\Http\Middleware\RoleMiddleware::class,
         'admin.ip' => \App\Http\Middleware\AdminIpWhitelistMiddleware::class,
+        'session.guard' => \App\Http\Middleware\EnsureSessionIsActive::class,
     ];
 }

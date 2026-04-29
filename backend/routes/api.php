@@ -26,6 +26,7 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\BlogFeedController;
 use App\Http\Controllers\AppVersionController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\UserSessionController;
 use App\Models\User;
 use App\Notifications\ChatMessageNotification;
 use Illuminate\Support\Facades\DB;
@@ -89,11 +90,14 @@ Route::get('/plans/public', [\App\Http\Controllers\PlanController::class, 'getAl
 Route::get('/plans/pricing', [\App\Http\Controllers\PlanController::class, 'getPricingForCountry']);
 
 // Protected routes (require JWT authentication)
-Route::middleware(['auth:api'])->group(function () {
+Route::middleware(['auth:api', 'session.guard'])->group(function () {
     // Auth routes
     Route::get('/user', [AuthenticationController::class, 'user']);
     Route::post('/logout', [AuthenticationController::class, 'logout']);
     Route::post('/refresh', [AuthenticationController::class, 'refresh']);
+    Route::get('/user/sessions', [UserSessionController::class, 'index']);
+    Route::delete('/user/sessions/{id}', [UserSessionController::class, 'revoke']);
+    Route::post('/user/sessions/sign-out-others', [UserSessionController::class, 'signOutOthers']);
     Route::patch('/profile', [AuthenticationController::class, 'updateProfile']);
     Route::get('/private-document-url', [AuthenticationController::class, 'getPrivateDocumentUrl']);
     Route::post('/change-password', [AuthenticationController::class, 'changePassword']);
