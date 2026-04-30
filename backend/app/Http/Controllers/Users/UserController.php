@@ -27,28 +27,33 @@ class UserController extends Controller
             ]);
         }
 
-        // Split query into words to support searching for "First Last"
         $words = explode(' ', $query);
 
-        $users = User::where(function($q) use ($words) {
-                foreach ($words as $word) {
-                    if (empty($word)) continue;
-                    $q->where(function($sq) use ($word) {
-                        $sq->where('first_name', 'LIKE', "%{$word}%")
+        $results = User::where(function($q) use ($query, $words) {
+                // Search full query in all fields
+                $q->where('first_name', 'LIKE', "%{$query}%")
+                  ->orWhere('last_name', 'LIKE', "%{$query}%")
+                  ->orWhere('display_name', 'LIKE', "%{$query}%")
+                  ->orWhere('email', 'LIKE', "%{$query}%")
+                  ->orWhere('phone', 'LIKE', "%{$query}%");
+
+                // Search each word if there are multiple
+                if (count($words) > 1) {
+                    foreach ($words as $word) {
+                        if (strlen($word) < 2) continue;
+                        $q->orWhere('first_name', 'LIKE', "%{$word}%")
                           ->orWhere('last_name', 'LIKE', "%{$word}%")
-                          ->orWhere('display_name', 'LIKE', "%{$word}%")
-                          ->orWhere('email', 'LIKE', "%{$word}%")
-                          ->orWhere('phone', 'LIKE', "%{$word}%");
-                    });
+                          ->orWhere('display_name', 'LIKE', "%{$word}%");
+                    }
                 }
             })
-            ->select('id', 'first_name', 'last_name', 'display_name', 'email', 'phone', 'profile_picture_url')
+            ->select('id', 'first_name', 'last_name', 'display_name', 'email', 'phone', 'profile_picture')
             ->limit(10)
             ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $users
+            'data' => $results
         ]);
     }
 
