@@ -106,6 +106,7 @@ Route::middleware(['auth:api', 'session.guard'])->group(function () {
     // User & Subscription routes
     Route::get('/subscription', [UserController::class, 'subscription']);
     Route::patch('/update_subscription', [UserController::class, 'update_subscription']);
+    Route::get('/users/search', [UserController::class, 'search']);
     Route::get('/users/{id}', [UserController::class, 'getUserById']);
     Route::get('/subscriptions/patient/{patientId}', [UserController::class, 'getPatientSubscription']);
 
@@ -866,5 +867,3 @@ Route::post('/oauth/exchange-code', function (Request $request) {
         ], 500);
     }
 })->withoutMiddleware(['auth:sanctum', 'auth:api']);
-
-
