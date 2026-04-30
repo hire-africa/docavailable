@@ -21,6 +21,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Life Lite',
                 'category' => 'individual',
+                'max_members' => 1,
                 'features' => json_encode(['2 Text Consultations', '2 Voice Calls', '1 Video Call + chat', 'Loyalty Points']),
                 'currency' => 'MWK',
                 'price' => 50,
@@ -33,6 +34,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Life Balance',
                 'category' => 'individual',
+                'max_members' => 1,
                 'features' => json_encode(['5 Text Consultations', '3 Voice Calls', '2 Video Calls', 'Loyalty Points']),
                 'currency' => 'MWK',
                 'price' => 55,
@@ -45,6 +47,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Life Max',
                 'category' => 'individual',
+                'max_members' => 1,
                 'features' => json_encode(['10 Text Consultations', '7 Voice Calls', '4 Video Calls', '7-day access to doctor', 'Priority response']),
                 'currency' => 'MWK',
                 'price' => 159000,
@@ -59,6 +62,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Basic Life',
                 'category' => 'individual',
+                'max_members' => 1,
                 'features' => json_encode(['video_calls' => 1, 'voice_calls' => 2, 'consultations' => 5, 'text_sessions' => 10]),
                 'currency' => 'USD',
                 'price' => 999,
@@ -71,6 +75,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Executive Life',
                 'category' => 'individual',
+                'max_members' => 1,
                 'features' => json_encode(['video_calls' => 3, 'voice_calls' => 5, 'consultations' => 15, 'text_sessions' => 30]),
                 'currency' => 'USD',
                 'price' => 1999,
@@ -83,6 +88,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Premium Life',
                 'category' => 'individual',
+                'max_members' => 1,
                 'features' => json_encode(['video_calls' => 5, 'voice_calls' => 10, 'consultations' => 30, 'text_sessions' => 60]),
                 'currency' => 'USD',
                 'price' => 3999,
@@ -97,6 +103,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Standard',
                 'category' => 'enterprise',
+                'max_members' => 100,
                 'features' => json_encode(['Up to 100 staff members', '20 Text Sessions', '8 Voice Calls', '2 Video Calls']),
                 'currency' => 'MWK',
                 'price' => 260000,
@@ -109,6 +116,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Advanced',
                 'category' => 'enterprise',
+                'max_members' => 100,
                 'features' => json_encode(['Up to 100 staff members', '30 Text Sessions', '15 Voice Calls', '6 Video Calls']),
                 'currency' => 'MWK',
                 'price' => 442000,
@@ -121,6 +129,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Premium',
                 'category' => 'enterprise',
+                'max_members' => 200,
                 'features' => json_encode(['Up to 200 staff members', '55 Text Sessions', '25 Voice Calls', '10 Video Calls']),
                 'currency' => 'MWK',
                 'price' => 779000,
@@ -133,6 +142,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Elite',
                 'category' => 'enterprise',
+                'max_members' => 150,
                 'features' => json_encode(['Up to 150 staff members', '60 Text Sessions', '30 Voice Calls', '12 Video Calls']),
                 'currency' => 'MWK',
                 'price' => 883000,
@@ -145,6 +155,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Enterprise',
                 'category' => 'enterprise',
+                'max_members' => 300,
                 'features' => json_encode(['Up to 300 staff members', '100 Text Sessions', '55 Voice Calls', '20 Video Calls']),
                 'currency' => 'MWK',
                 'price' => 1515000,
@@ -157,6 +168,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'CampusHealth',
                 'category' => 'enterprise',
+                'max_members' => 1000,
                 'features' => json_encode(['Bulk enrollment', 'Student mental health support', 'Campus clinic integration']),
                 'currency' => 'MWK',
                 'price' => 0,
