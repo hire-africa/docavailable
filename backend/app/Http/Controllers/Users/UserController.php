@@ -27,12 +27,20 @@ class UserController extends Controller
             ]);
         }
 
-        $users = User::where(function($q) use ($query) {
-                $q->where('first_name', 'LIKE', "%{$query}%")
-                  ->orWhere('last_name', 'LIKE', "%{$query}%")
-                  ->orWhere('display_name', 'LIKE', "%{$query}%")
-                  ->orWhere('email', 'LIKE', "%{$query}%")
-                  ->orWhere('phone', 'LIKE', "%{$query}%");
+        // Split query into words to support searching for "First Last"
+        $words = explode(' ', $query);
+
+        $users = User::where(function($q) use ($words) {
+                foreach ($words as $word) {
+                    if (empty($word)) continue;
+                    $q->where(function($sq) use ($word) {
+                        $sq->where('first_name', 'LIKE', "%{$word}%")
+                          ->orWhere('last_name', 'LIKE', "%{$word}%")
+                          ->orWhere('display_name', 'LIKE', "%{$word}%")
+                          ->orWhere('email', 'LIKE', "%{$word}%")
+                          ->orWhere('phone', 'LIKE', "%{$word}%");
+                    });
+                }
             })
             ->select('id', 'first_name', 'last_name', 'display_name', 'email', 'phone', 'profile_picture_url')
             ->limit(10)
