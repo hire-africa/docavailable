@@ -106,6 +106,7 @@ Route::middleware(['auth:api', 'session.guard'])->group(function () {
     // User & Subscription routes
     Route::get('/subscription', [UserController::class, 'subscription']);
     Route::patch('/update_subscription', [UserController::class, 'update_subscription']);
+    Route::get('/users/search', [UserController::class, 'search']);
     Route::get('/users/{id}', [UserController::class, 'getUserById']);
     Route::get('/subscriptions/patient/{patientId}', [UserController::class, 'getPatientSubscription']);
 
@@ -114,7 +115,6 @@ Route::middleware(['auth:api', 'session.guard'])->group(function () {
     Route::post('/subscription/members', [\App\Http\Controllers\SubscriptionMemberController::class, 'store']);
     Route::delete('/subscription/members/{id}', [\App\Http\Controllers\SubscriptionMemberController::class, 'destroy']);
     Route::get('/subscription/stats', [\App\Http\Controllers\EnterpriseStatsController::class, 'getStats']);
-    Route::get('/users/search', [\App\Http\Controllers\Users\UserController::class, 'search']);
 
     // Review routes
     Route::get('/reviews', [ReviewController::class, 'reviews']);
