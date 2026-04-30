@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Cache;
 use App\Models\Plan;
 use Illuminate\Support\Facades\DB;
 
@@ -187,6 +188,14 @@ class PlanSeeder extends Seeder
             ]));
         }
 
-        $this->command->info('Plans seeded successfully!');
+        // Flush cached plan responses so the API returns fresh data immediately
+        Cache::forget('all_plans_with_currency');
+        foreach (['Malawi', 'Zambia', 'Zimbabwe', 'Uganda', 'Tanzania', 'Kenya'] as $country) {
+            foreach (['MWK', 'USD', 'ZMW', 'UGX', 'TZS', 'KES'] as $currency) {
+                Cache::forget("plans_for_country_{$country}_{$currency}");
+            }
+        }
+
+        $this->command->info('Plans seeded successfully! Cache cleared.');
     }
 }
