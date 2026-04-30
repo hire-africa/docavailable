@@ -100,7 +100,20 @@ class PlanSeeder extends Seeder
                 'video_calls' => 5,
             ],
 
-            // ENTERPRISE PLANS (MWK)
+            // ENTERPRISE PLANS (MWK) - UPDATED TO PRICING V3
+            [
+                'name' => 'Essential',
+                'category' => 'enterprise',
+                'max_members' => 50,
+                'features' => json_encode(['Up to 50 staff members', '10 Text Sessions', '4 Voice Calls', '1 Video Call']),
+                'currency' => 'MWK',
+                'price' => 130000,
+                'duration' => 30,
+                'status' => 1,
+                'text_sessions' => 10,
+                'voice_calls' => 4,
+                'video_calls' => 1,
+            ],
             [
                 'name' => 'Standard',
                 'category' => 'enterprise',
