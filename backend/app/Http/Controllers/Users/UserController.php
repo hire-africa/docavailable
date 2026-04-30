@@ -204,7 +204,9 @@ class UserController extends Controller
             }
 
             // Use the newest subscription for plan metadata (name, price, etc.)
+            // Load the plan relationship to expose max_members and category to the frontend.
             $newest = $subs->last();
+            $newest->load('plan');
             // Use the earliest end_date for display
             $earliestEnd = $subs->min('end_date');
             $latestEnd = $subs->max('end_date');
@@ -213,6 +215,7 @@ class UserController extends Controller
                 'id' => $newest->id,
                 'plan_id' => $newest->plan_id,
                 'planName' => $newest->plan_name,
+                'plan_name' => $newest->plan_name,
                 'plan_price' => $newest->plan_price,
                 'plan_currency' => $newest->plan_currency,
                 'textSessionsRemaining' => $aggregated['text_sessions_remaining'],
@@ -222,12 +225,22 @@ class UserController extends Controller
                 'totalVoiceCalls' => $aggregated['total_voice_calls'],
                 'totalVideoCalls' => $aggregated['total_video_calls'],
                 'activatedAt' => $newest->activated_at,
+                'activated_at' => $newest->activated_at,
                 'expiresAt' => $latestEnd,
+                'expires_at' => $latestEnd,
                 'isActive' => true,
+                'is_active' => true,
                 'status' => 1,
                 'start_date' => $newest->start_date,
                 'end_date' => $latestEnd,
                 'active_subscriptions_count' => $subs->count(),
+                // Plan details for membership management
+                'plan' => $newest->plan ? [
+                    'id' => $newest->plan->id,
+                    'name' => $newest->plan->name,
+                    'category' => $newest->plan->category ?? 'individual',
+                    'max_members' => $newest->plan->max_members ?? 1,
+                ] : null,
             ];
 
             return response()->json([
