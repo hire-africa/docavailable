@@ -55,6 +55,44 @@ class PlanSeeder extends Seeder
                 'video_calls' => 4,
             ],
 
+            // INDIVIDUAL PLANS (USD)
+            [
+                'name' => 'Basic Life',
+                'category' => 'individual',
+                'features' => json_encode(['video_calls' => 1, 'voice_calls' => 2, 'consultations' => 5, 'text_sessions' => 10]),
+                'currency' => 'USD',
+                'price' => 999,
+                'duration' => 30,
+                'status' => 1,
+                'text_sessions' => 10,
+                'voice_calls' => 2,
+                'video_calls' => 1,
+            ],
+            [
+                'name' => 'Executive Life',
+                'category' => 'individual',
+                'features' => json_encode(['video_calls' => 3, 'voice_calls' => 5, 'consultations' => 15, 'text_sessions' => 30]),
+                'currency' => 'USD',
+                'price' => 1999,
+                'duration' => 30,
+                'status' => 1,
+                'text_sessions' => 30,
+                'voice_calls' => 5,
+                'video_calls' => 3,
+            ],
+            [
+                'name' => 'Premium Life',
+                'category' => 'individual',
+                'features' => json_encode(['video_calls' => 5, 'voice_calls' => 10, 'consultations' => 30, 'text_sessions' => 60]),
+                'currency' => 'USD',
+                'price' => 3999,
+                'duration' => 30,
+                'status' => 1,
+                'text_sessions' => 60,
+                'voice_calls' => 10,
+                'video_calls' => 5,
+            ],
+
             // ENTERPRISE PLANS (MWK)
             [
                 'name' => 'Standard',
