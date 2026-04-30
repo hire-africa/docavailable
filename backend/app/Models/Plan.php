@@ -12,6 +12,7 @@ class Plan extends Model
     protected $fillable = [
         'name',
         'category',
+        'max_members',
         'features',
         'currency',
         'price',

@@ -51,6 +51,11 @@ class Subscription extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function members()
+    {
+        return $this->hasMany(SubscriptionMember::class);
+    }
+
     /**
      * Check if subscription is active
      */
@@ -126,6 +131,7 @@ class Subscription extends Model
     /**
      * Get the oldest active subscription that still has remaining sessions
      * of the given type. Used for FIFO deduction.
+     * Supports shared subscriptions for members.
      *
      * @param int    $userId
      * @param string $sessionType  'text' | 'voice' | 'video'
@@ -139,7 +145,14 @@ class Subscription extends Model
             default => 'text_sessions_remaining',
         };
 
-        return static::where('user_id', $userId)
+        $subscriptionIds = SubscriptionMember::where('user_id', $userId)
+            ->where('status', 'active')
+            ->pluck('subscription_id');
+
+        return static::where(function($query) use ($userId, $subscriptionIds) {
+                $query->where('user_id', $userId)
+                      ->orWhereIn('id', $subscriptionIds);
+            })
             ->where('is_active', true)
             ->where('status', 1)
             ->whereNotNull('end_date')
@@ -153,13 +166,21 @@ class Subscription extends Model
     /**
      * Get aggregated remaining sessions across all active subscriptions.
      * Used for API display so the user sees a single combined total.
+     * Supports shared subscriptions for members.
      *
      * @param int $userId
      * @return array{text_sessions_remaining: int, voice_calls_remaining: int, video_calls_remaining: int, subscriptions: \Illuminate\Support\Collection}
      */
     public static function getAggregatedSessions(int $userId): array
     {
-        $subs = static::where('user_id', $userId)
+        $subscriptionIds = SubscriptionMember::where('user_id', $userId)
+            ->where('status', 'active')
+            ->pluck('subscription_id');
+
+        $subs = static::where(function($query) use ($userId, $subscriptionIds) {
+                $query->where('user_id', $userId)
+                      ->orWhereIn('id', $subscriptionIds);
+            })
             ->where('is_active', true)
             ->where('status', 1)
             ->whereNotNull('end_date')
@@ -180,6 +201,7 @@ class Subscription extends Model
 
     /**
      * Get total remaining sessions of a given type across all active subscriptions.
+     * Supports shared subscriptions for members.
      *
      * @param int    $userId
      * @param string $sessionType 'text' | 'voice' | 'video'
@@ -193,7 +215,14 @@ class Subscription extends Model
             default => 'text_sessions_remaining',
         };
 
-        return (int) static::where('user_id', $userId)
+        $subscriptionIds = SubscriptionMember::where('user_id', $userId)
+            ->where('status', 'active')
+            ->pluck('subscription_id');
+
+        return (int) static::where(function($query) use ($userId, $subscriptionIds) {
+                $query->where('user_id', $userId)
+                      ->orWhereIn('id', $subscriptionIds);
+            })
             ->where('is_active', true)
             ->where('status', 1)
             ->whereNotNull('end_date')
