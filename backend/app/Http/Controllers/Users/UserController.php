@@ -13,6 +13,37 @@ class UserController extends Controller
 {
     use HasImageUrls;
 
+    /**
+     * Search for users by name, email, or phone.
+     * Restricted to authenticated users for privacy.
+     */
+    public function search(Request $request)
+    {
+        $query = $request->input('query');
+        if (strlen($query) < 3) {
+            return response()->json([
+                'success' => true,
+                'data' => []
+            ]);
+        }
+
+        $users = User::where(function($q) use ($query) {
+                $q->where('first_name', 'LIKE', "%{$query}%")
+                  ->orWhere('last_name', 'LIKE', "%{$query}%")
+                  ->orWhere('display_name', 'LIKE', "%{$query}%")
+                  ->orWhere('email', 'LIKE', "%{$query}%")
+                  ->orWhere('phone', 'LIKE', "%{$query}%");
+            })
+            ->select('id', 'first_name', 'last_name', 'display_name', 'email', 'phone', 'profile_picture_url')
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $users
+        ]);
+    }
+
     private function isWithinWorkingHoursSlot(array $workingHours, Carbon $now, string $dayKey): bool
     {
         $day = $workingHours[$dayKey] ?? null;
