@@ -19,42 +19,50 @@ class UserController extends Controller
      */
     public function search(Request $request)
     {
-        $query = $request->input('query');
-        if (strlen($query) < 3) {
+        try {
+            $query = $request->input('query');
+            if (strlen($query) < 3) {
+                return response()->json([
+                    'success' => true,
+                    'data' => []
+                ]);
+            }
+
+            $words = explode(' ', $query);
+
+            $results = User::where(function($q) use ($query, $words) {
+                    // Search full query in all fields
+                    $q->where('first_name', 'LIKE', "%{$query}%")
+                      ->orWhere('last_name', 'LIKE', "%{$query}%")
+                      ->orWhere('display_name', 'LIKE', "%{$query}%")
+                      ->orWhere('email', 'LIKE', "%{$query}%")
+                      ->orWhere('phone', 'LIKE', "%{$query}%");
+
+                    // Search each word if there are multiple
+                    if (count($words) > 1) {
+                        foreach ($words as $word) {
+                            if (strlen($word) < 2) continue;
+                            $q->orWhere('first_name', 'LIKE', "%{$word}%")
+                              ->orWhere('last_name', 'LIKE', "%{$word}%")
+                              ->orWhere('display_name', 'LIKE', "%{$word}%");
+                        }
+                    }
+                })
+                ->select('id', 'first_name', 'last_name', 'display_name', 'email', 'phone', 'profile_picture')
+                ->limit(10)
+                ->get();
+
             return response()->json([
                 'success' => true,
-                'data' => []
+                'data' => $results
             ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Search error: ' . $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ], 500);
         }
-
-        $words = explode(' ', $query);
-
-        $results = User::where(function($q) use ($query, $words) {
-                // Search full query in all fields
-                $q->where('first_name', 'LIKE', "%{$query}%")
-                  ->orWhere('last_name', 'LIKE', "%{$query}%")
-                  ->orWhere('display_name', 'LIKE', "%{$query}%")
-                  ->orWhere('email', 'LIKE', "%{$query}%")
-                  ->orWhere('phone', 'LIKE', "%{$query}%");
-
-                // Search each word if there are multiple
-                if (count($words) > 1) {
-                    foreach ($words as $word) {
-                        if (strlen($word) < 2) continue;
-                        $q->orWhere('first_name', 'LIKE', "%{$word}%")
-                          ->orWhere('last_name', 'LIKE', "%{$word}%")
-                          ->orWhere('display_name', 'LIKE', "%{$word}%");
-                    }
-                }
-            })
-            ->select('id', 'first_name', 'last_name', 'display_name', 'email', 'phone', 'profile_picture')
-            ->limit(10)
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => $results
-        ]);
     }
 
     private function isWithinWorkingHoursSlot(array $workingHours, Carbon $now, string $dayKey): bool
