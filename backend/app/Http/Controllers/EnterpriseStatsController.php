@@ -23,6 +23,7 @@ class EnterpriseStatsController extends Controller
             ->whereHas('plan', function($query) {
                 $query->where('max_members', '>', 1);
             })
+            ->with('plan')
             ->first();
 
         if (!$subscription) {
@@ -39,36 +40,35 @@ class EnterpriseStatsController extends Controller
         
         $allIds = array_unique(array_merge([$user->id], $memberIds));
 
-        // 3. Calculate consultation stats
+        // 3. Calculate consultation stats (Usage vs Quota)
+        // Quota is the sum of text, voice, and video calls allowed in the plan
+        $plan = $subscription->plan;
+        $totalQuota = ($plan->text_sessions ?? 0) + ($plan->voice_calls ?? 0) + ($plan->video_calls ?? 0);
+
+        // Usage is consultations performed WITHIN this active subscription period
+        $subStart = $subscription->activated_at ?: $subscription->created_at;
+        
+        $usedAppointments = Appointment::whereIn('patient_id', $allIds)
+            ->where('created_at', '>=', $subStart)
+            ->count();
+        $usedTextSessions = TextSession::whereIn('patient_id', $allIds)
+            ->where('created_at', '>=', $subStart)
+            ->count();
+        
+        $totalUsed = $usedAppointments + $usedTextSessions;
+
+        // Monthly stats for growth
         $now = Carbon::now();
         $thisMonthStart = $now->copy()->startOfMonth();
         $lastMonthStart = $now->copy()->subMonth()->startOfMonth();
         $lastMonthEnd = $now->copy()->subMonth()->endOfMonth();
 
-        // Total consultations
-        $totalAppointments = Appointment::whereIn('patient_id', $allIds)->count();
-        $totalTextSessions = TextSession::whereIn('patient_id', $allIds)->count();
-        $totalOverall = $totalAppointments + $totalTextSessions;
+        $currTotal = Appointment::whereIn('patient_id', $allIds)->where('created_at', '>=', $thisMonthStart)->count() +
+                     TextSession::whereIn('patient_id', $allIds)->where('created_at', '>=', $thisMonthStart)->count();
 
-        // Current month
-        $currAppointments = Appointment::whereIn('patient_id', $allIds)
-            ->where('created_at', '>=', $thisMonthStart)
-            ->count();
-        $currTextSessions = TextSession::whereIn('patient_id', $allIds)
-            ->where('created_at', '>=', $thisMonthStart)
-            ->count();
-        $currTotal = $currAppointments + $currTextSessions;
+        $prevTotal = Appointment::whereIn('patient_id', $allIds)->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count() +
+                     TextSession::whereIn('patient_id', $allIds)->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
 
-        // Last month
-        $prevAppointments = Appointment::whereIn('patient_id', $allIds)
-            ->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])
-            ->count();
-        $prevTextSessions = TextSession::whereIn('patient_id', $allIds)
-            ->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])
-            ->count();
-        $prevTotal = $prevAppointments + $prevTextSessions;
-
-        // Growth
         $growth = 0;
         if ($prevTotal > 0) {
             $growth = (($currTotal - $prevTotal) / $prevTotal) * 100;
@@ -82,41 +82,33 @@ class EnterpriseStatsController extends Controller
             ->orderBy('created_at', 'desc')
             ->first();
 
-        // 5. Get member activity (last interaction per member)
+        // 5. Get member activity
         $memberActivity = [];
         foreach ($allIds as $id) {
-            $lastAppt = Appointment::where('patient_id', $id)->orderBy('created_at', 'desc')->first();
-            $lastChat = TextSession::where('patient_id', $id)->orderBy('created_at', 'desc')->first();
+            $lastAt = Appointment::where('patient_id', $id)->orderBy('created_at', 'desc')->value('created_at');
+            $lastChat = TextSession::where('patient_id', $id)->orderBy('created_at', 'desc')->value('created_at');
             
-            $lastAt = null;
-            if ($lastAppt && $lastChat) {
-                $lastAt = $lastAppt->created_at->gt($lastChat->created_at) ? $lastAppt->created_at : $lastChat->created_at;
-            } else if ($lastAppt) {
-                $lastAt = $lastAppt->created_at;
-            } else if ($lastChat) {
-                $lastAt = $lastChat->created_at;
+            $finalLast = null;
+            if ($lastAt && $lastChat) {
+                $finalLast = $lastAt > $lastChat ? $lastAt : $lastChat;
+            } else {
+                $finalLast = $lastAt ?: $lastChat;
             }
 
-            if ($lastAt) {
-                $memberActivity[$id] = $lastAt->diffForHumans();
-            } else {
-                $memberActivity[$id] = 'Never';
-            }
+            $memberActivity[$id] = $finalLast ? Carbon::parse($finalLast)->diffForHumans() : 'Never';
         }
 
         return response()->json([
             'success' => true,
             'data' => [
-                'total_consultations' => $totalOverall,
-                'current_month_total' => $currTotal,
-                'last_month_total' => $prevTotal,
-                'growth_percentage' => round($growth, 1),
+                'total_consultations' => $totalUsed,
+                'total_quota' => $totalQuota,
+                'usage_label' => $totalUsed . ' / ' . $totalQuota,
                 'growth_label' => ($growth >= 0 ? '+' : '') . round($growth, 1) . '%',
                 'last_payment' => $lastPayment ? [
                     'amount' => $lastPayment->amount,
                     'currency' => $lastPayment->currency,
-                    'date' => $lastPayment->created_at->format('d M Y'),
-                    'method' => $lastPayment->payment_method
+                    'date' => Carbon::parse($lastPayment->created_at)->format('d M Y'),
                 ] : null,
                 'member_activity' => $memberActivity
             ]
