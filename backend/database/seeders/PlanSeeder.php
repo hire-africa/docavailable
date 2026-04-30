@@ -17,130 +17,124 @@ class PlanSeeder extends Seeder
         Plan::truncate();
 
         $plans = [
+            // INDIVIDUAL PLANS (MWK)
             [
-                'name' => 'Basic Life',
-                'features' => json_encode([
-                    'video_calls' => 1,
-                    'voice_calls' => 2,
-                    'consultations' => 5,
-                    'text_sessions' => 10,
-                    'health_records' => false,
-                    'priority_support' => false
-                ]),
-                'currency' => 'USD',
-                'price' => 999,
+                'name' => 'Life Lite',
+                'category' => 'individual',
+                'features' => json_encode(['2 Text Consultations', '2 Voice Calls', '1 Video Call + chat', 'Loyalty Points']),
+                'currency' => 'MWK',
+                'price' => 50,
+                'duration' => 14,
+                'status' => 1,
+                'text_sessions' => 2,
+                'voice_calls' => 2,
+                'video_calls' => 1,
+            ],
+            [
+                'name' => 'Life Balance',
+                'category' => 'individual',
+                'features' => json_encode(['5 Text Consultations', '3 Voice Calls', '2 Video Calls', 'Loyalty Points']),
+                'currency' => 'MWK',
+                'price' => 55,
+                'duration' => 21,
+                'status' => 1,
+                'text_sessions' => 5,
+                'voice_calls' => 3,
+                'video_calls' => 2,
+            ],
+            [
+                'name' => 'Life Max',
+                'category' => 'individual',
+                'features' => json_encode(['10 Text Consultations', '7 Voice Calls', '4 Video Calls', '7-day access to doctor', 'Priority response']),
+                'currency' => 'MWK',
+                'price' => 159000,
                 'duration' => 30,
                 'status' => 1,
                 'text_sessions' => 10,
-                'voice_calls' => 2,
-                'video_calls' => 1,
-                'created_at' => now(),
-                'updated_at' => now()
+                'voice_calls' => 7,
+                'video_calls' => 4,
+            ],
+
+            // ENTERPRISE PLANS (MWK)
+            [
+                'name' => 'Standard',
+                'category' => 'enterprise',
+                'features' => json_encode(['Up to 100 staff members', '20 Text Sessions', '8 Voice Calls', '2 Video Calls']),
+                'currency' => 'MWK',
+                'price' => 260000,
+                'duration' => 30,
+                'status' => 1,
+                'text_sessions' => 20,
+                'voice_calls' => 8,
+                'video_calls' => 2,
             ],
             [
-                'name' => 'Executive Life',
-                'features' => json_encode([
-                    'video_calls' => 3,
-                    'voice_calls' => 5,
-                    'consultations' => 15,
-                    'text_sessions' => 30,
-                    'health_records' => true,
-                    'priority_support' => false
-                ]),
-                'currency' => 'USD',
-                'price' => 1999,
-                'duration' => 30,
+                'name' => 'Advanced',
+                'category' => 'enterprise',
+                'features' => json_encode(['Up to 100 staff members', '30 Text Sessions', '15 Voice Calls', '6 Video Calls']),
+                'currency' => 'MWK',
+                'price' => 442000,
+                'duration' => 180,
                 'status' => 1,
                 'text_sessions' => 30,
-                'voice_calls' => 5,
-                'video_calls' => 3,
-                'created_at' => now(),
-                'updated_at' => now()
+                'voice_calls' => 15,
+                'video_calls' => 6,
             ],
             [
-                'name' => 'Premium Life',
-                'features' => json_encode([
-                    'video_calls' => 5,
-                    'voice_calls' => 10,
-                    'consultations' => 30,
-                    'text_sessions' => 60,
-                    'health_records' => true,
-                    'priority_support' => true
-                ]),
-                'currency' => 'USD',
-                'price' => 3999,
-                'duration' => 30,
+                'name' => 'Premium',
+                'category' => 'enterprise',
+                'features' => json_encode(['Up to 200 staff members', '55 Text Sessions', '25 Voice Calls', '10 Video Calls']),
+                'currency' => 'MWK',
+                'price' => 779000,
+                'duration' => 180,
+                'status' => 1,
+                'text_sessions' => 55,
+                'voice_calls' => 25,
+                'video_calls' => 10,
+            ],
+            [
+                'name' => 'Elite',
+                'category' => 'enterprise',
+                'features' => json_encode(['Up to 150 staff members', '60 Text Sessions', '30 Voice Calls', '12 Video Calls']),
+                'currency' => 'MWK',
+                'price' => 883000,
+                'duration' => 365,
                 'status' => 1,
                 'text_sessions' => 60,
-                'voice_calls' => 10,
-                'video_calls' => 5,
-                'created_at' => now(),
-                'updated_at' => now()
+                'voice_calls' => 30,
+                'video_calls' => 12,
             ],
             [
-                'name' => 'Basic Life',
-                'features' => json_encode([
-                    'video_calls' => 1,
-                    'voice_calls' => 2,
-                    'consultations' => 5,
-                    'text_sessions' => 10,
-                    'health_records' => false,
-                    'priority_support' => false
-                ]),
+                'name' => 'Enterprise',
+                'category' => 'enterprise',
+                'features' => json_encode(['Up to 300 staff members', '100 Text Sessions', '55 Voice Calls', '20 Video Calls']),
                 'currency' => 'MWK',
-                'price' => 100,
-                'duration' => 30,
+                'price' => 1515000,
+                'duration' => 365,
                 'status' => 1,
-                'text_sessions' => 10,
-                'voice_calls' => 2,
-                'video_calls' => 1,
-                'created_at' => now(),
-                'updated_at' => now()
+                'text_sessions' => 100,
+                'voice_calls' => 55,
+                'video_calls' => 20,
             ],
             [
-                'name' => 'Executive Life',
-                'features' => json_encode([
-                    'video_calls' => 3,
-                    'voice_calls' => 5,
-                    'consultations' => 15,
-                    'text_sessions' => 30,
-                    'health_records' => true,
-                    'priority_support' => false
-                ]),
+                'name' => 'CampusHealth',
+                'category' => 'enterprise',
+                'features' => json_encode(['Bulk enrollment', 'Student mental health support', 'Campus clinic integration']),
                 'currency' => 'MWK',
-                'price' => 150,
+                'price' => 0,
                 'duration' => 30,
                 'status' => 1,
-                'text_sessions' => 30,
-                'voice_calls' => 5,
-                'video_calls' => 3,
-                'created_at' => now(),
-                'updated_at' => now()
+                'text_sessions' => 0,
+                'voice_calls' => 0,
+                'video_calls' => 0,
             ],
-            [
-                'name' => 'Premium Life',
-                'features' => json_encode([
-                    'video_calls' => 5,
-                    'voice_calls' => 10,
-                    'consultations' => 30,
-                    'text_sessions' => 60,
-                    'health_records' => true,
-                    'priority_support' => true
-                ]),
-                'currency' => 'MWK',
-                'price' => 200,
-                'duration' => 30,
-                'status' => 1,
-                'text_sessions' => 60,
-                'voice_calls' => 10,
-                'video_calls' => 5,
-                'created_at' => now(),
-                'updated_at' => now()
-            ]
         ];
 
         foreach ($plans as $plan) {
-            Plan::create($plan);
+            Plan::create(array_merge($plan, [
+                'created_at' => now(),
+                'updated_at' => now()
+            ]));
         }
 
         $this->command->info('Plans seeded successfully!');
