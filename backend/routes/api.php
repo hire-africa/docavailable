@@ -109,6 +109,12 @@ Route::middleware(['auth:api', 'session.guard'])->group(function () {
     Route::get('/users/{id}', [UserController::class, 'getUserById']);
     Route::get('/subscriptions/patient/{patientId}', [UserController::class, 'getPatientSubscription']);
 
+    // Shared Subscription Member routes
+    Route::get('/subscription/members', [\App\Http\Controllers\SubscriptionMemberController::class, 'index']);
+    Route::post('/subscription/members', [\App\Http\Controllers\SubscriptionMemberController::class, 'store']);
+    Route::delete('/subscription/members/{id}', [\App\Http\Controllers\SubscriptionMemberController::class, 'destroy']);
+    Route::get('/subscription/stats', [\App\Http\Controllers\EnterpriseStatsController::class, 'getStats']);
+
     // Review routes
     Route::get('/reviews', [ReviewController::class, 'reviews']);
     Route::post('/create_review', [ReviewController::class, 'create_review']);
