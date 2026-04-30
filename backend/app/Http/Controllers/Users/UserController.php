@@ -30,15 +30,20 @@ class UserController extends Controller
 
             $words = explode(' ', $query);
 
-            $results = User::where(function($q) use ($query, $words) {
-                    // Search full query in all fields
+            // phone is a bigint in PostgreSQL — LIKE on a bigint causes a cast error
+            // Only include phone in search if the query looks numeric
+            $isNumericQuery = is_numeric(str_replace(['+', '-', ' ', '(', ')'], '', $query));
+
+            $results = User::where(function($q) use ($query, $words, $isNumericQuery) {
                     $q->where('first_name', 'LIKE', "%{$query}%")
                       ->orWhere('last_name', 'LIKE', "%{$query}%")
                       ->orWhere('display_name', 'LIKE', "%{$query}%")
-                      ->orWhere('email', 'LIKE', "%{$query}%")
-                      ->orWhere('phone', 'LIKE', "%{$query}%");
+                      ->orWhere('email', 'LIKE', "%{$query}%");
 
-                    // Search each word if there are multiple
+                    if ($isNumericQuery) {
+                        $q->orWhereRaw('CAST(phone AS TEXT) LIKE ?', ["%{$query}%"]);
+                    }
+
                     if (count($words) > 1) {
                         foreach ($words as $word) {
                             if (strlen($word) < 2) continue;
